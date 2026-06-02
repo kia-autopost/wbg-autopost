@@ -9,15 +9,17 @@ Features:
 - Rotating logo selection from all WBG brand variants
 - 720p efficient encoding
 """
-import os, tempfile, shutil, wave, subprocess, random, urllib.request, json
+import os, tempfile, shutil, wave, subprocess, random, urllib.request, json, logging
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 import imageio_ffmpeg
 import cloudinary
 import cloudinary.uploader
 
-ASSETS_DIR   = os.path.join(os.path.dirname(__file__), 'assets')
-FONT_PATH    = os.path.join(ASSETS_DIR, 'Caladea-Regular.ttf')
+log = logging.getLogger('WBG')
+
+ASSETS_DIR    = os.path.join(os.path.dirname(__file__), 'assets')
+FONT_PATH     = os.path.join(ASSETS_DIR, 'Caladea-Regular.ttf')
 HEADSHOT_PATH = os.path.join(ASSETS_DIR, 'headshot.png')
 
 # All WBG logo variants - randomly selected per post
@@ -33,8 +35,8 @@ LOGO_FILES = [
 
 W, H     = 720, 1280
 FPS      = 24
-DURATION = 15
-FADE_FRAMES = int(FPS * 0.8)  # 0.8s fade per text element
+DURATION = 8          # Reduced from 15 to cut render time in half
+FADE_FRAMES = int(FPS * 0.8)
 
 # WBG Brand colors
 BLACK      = (12, 12, 12)
@@ -51,11 +53,11 @@ AGENT_PHONE    = '925-940-3025'
 AGENT_HANDLE   = '@Whitney_Pierce_WBG'
 
 SD_QUERIES = {
-    'property_spotlight': ['luxury home san diego', 'modern house california', 'beach house san diego', 'mediterranean villa'],
-    'market_stat':        ['san diego skyline', 'san diego aerial', 'la jolla cove california', 'san diego downtown'],
-    'buyer_seller_tip':   ['house keys', 'home interior modern', 'open house', 'real estate handshake'],
-    'investor_quote':     ['city skyline sunset', 'modern architecture', 'real estate investment', 'luxury apartment'],
-    'san_diego_lifestyle':['san diego beach sunset', 'la jolla california', 'coronado island', 'del mar california'],
+    'property_spotlight':  ['luxury home san diego', 'modern house california', 'beach house san diego', 'mediterranean villa'],
+    'market_stat':         ['san diego skyline', 'san diego aerial', 'la jolla cove california', 'san diego downtown'],
+    'buyer_seller_tip':    ['house keys', 'home interior modern', 'open house', 'real estate handshake'],
+    'investor_quote':      ['city skyline sunset', 'modern architecture', 'real estate investment', 'luxury apartment'],
+    'san_diego_lifestyle': ['san diego beach sunset', 'la jolla california', 'coronado island', 'del mar california'],
 }
 
 def _get_background(content_type):
@@ -66,45 +68,43 @@ def _get_background(content_type):
             query = random.choice(queries).replace(' ', '+')
             url = f'https://api.unsplash.com/photos/random?query={query}&orientation=portrait&client_id={UNSPLASH_KEY}'
             req = urllib.request.Request(url, headers={'Accept-Version': 'v1'})
-            with urllib.request.urlopen(req, timeout=8) as r:
+            with urllib.request.urlopen(req, timeout=5) as r:
                 data = json.loads(r.read())
             img_url = data['urls']['regular']
-            with urllib.request.urlopen(img_url, timeout=15) as r:
+            with urllib.request.urlopen(img_url, timeout=8) as r:
                 img_data = r.read()
             tmp = tempfile.mktemp(suffix='.jpg')
             with open(tmp, 'wb') as f:
                 f.write(img_data)
             bg = Image.open(tmp).convert('RGBA')
             os.unlink(tmp)
-            # Resize to fill 720x1280
             ratio = max(W/bg.width, H/bg.height)
             new_w, new_h = int(bg.width*ratio), int(bg.height*ratio)
             bg = bg.resize((new_w, new_h), Image.LANCZOS)
             left = (new_w - W) // 2
             top  = (new_h - H) // 2
             bg = bg.crop((left, top, left+W, top+H))
+            log.info('Unsplash background fetched OK')
             return bg
         except Exception as e:
-            pass
+            log.warning(f'Unsplash failed, using gradient fallback: {e}')
     return _gradient_bg()
 
 def _gradient_bg():
     """Rich dark gradient background with subtle orange glow."""
     img = Image.new('RGBA', (W, H), (0, 0, 0, 255))
     draw = ImageDraw.Draw(img)
-    # Dark gradient top to bottom
     for y in range(H):
         t = y / H
         r = int(15 + t * 8)
         g = int(12 + t * 5)
         b = int(12 + t * 5)
         draw.line([(0, y), (W, y)], fill=(r, g, b, 255))
-    # Orange glow bottom left
     glow = Image.new('RGBA', (W, H), (0, 0, 0, 0))
     gd = ImageDraw.Draw(glow)
     for i in range(120, 0, -1):
         alpha = int((120 - i) * 1.2)
-        gd.ellipse([(- i, H - i * 2), (i * 3, H + i)], fill=(*ORANGE_DIM, alpha))
+        gd.ellipse([(-i, H - i*2), (i*3, H + i)], fill=(*ORANGE_DIM, alpha))
     img = Image.alpha_composite(img, glow)
     return img
 
@@ -112,7 +112,6 @@ def _dark_overlay(bg):
     """Add dark overlay so text is always readable."""
     overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
-    # Gradient overlay - darker at top and bottom, lighter in middle
     for y in range(H):
         t = y / H
         if t < 0.35:
@@ -120,7 +119,7 @@ def _dark_overlay(bg):
         elif t > 0.65:
             alpha = int(130 + (t - 0.65) * 300)
         else:
-            alpha = int(140)
+            alpha = 140
         draw.line([(0, y), (W, y)], fill=(0, 0, 0, alpha))
     return Image.alpha_composite(bg.convert('RGBA'), overlay)
 
@@ -157,7 +156,6 @@ def _get_logo():
                 return logo, name
             except:
                 continue
-    # Fallback to any logo file
     for f in os.listdir(ASSETS_DIR):
         if f.startswith('logo') and f.endswith('.png'):
             try:
@@ -186,10 +184,7 @@ def _add_headshot(img, size=160, pos='right'):
         hw = size
         hh = int(hw * hs.height / hs.width)
         hs = hs.resize((hw, hh), Image.LANCZOS)
-        if pos == 'right':
-            x = W - hw - 25
-        else:
-            x = 25
+        x = W - hw - 25 if pos == 'right' else 25
         y = H - hh - 155
         img.paste(hs, (x, y), hs)
     except:
@@ -211,7 +206,6 @@ def build_frame(post_data, bg_img=None):
     img = _dark_overlay(bg_img)
     draw = ImageDraw.Draw(img)
 
-    # Orange accent bars top and bottom
     draw.rectangle([(0, 0), (W, 6)], fill=(*ORANGE, 255))
     draw.rectangle([(0, H - 6), (W, H)], fill=(*ORANGE, 255))
 
@@ -223,12 +217,11 @@ def build_frame(post_data, bg_img=None):
         baths = post_data.get('baths', '')
         sqft  = post_data.get('sqft', '')
         hl2   = post_data.get('highlight', '')
-
-        draw.text((W//2, 80), 'FOR SALE', font=_load_font(26), fill=(*ORANGE, 230), anchor='mm')
+        draw.text((W//2, 80),  'FOR SALE', font=_load_font(26), fill=(*ORANGE, 230), anchor='mm')
         draw.text((W//2, 140), hood.upper(), font=_load_font(58), fill=(*WHITE, 255), anchor='mm')
         _orange_bar(draw, 178, 80)
         draw.text((W//2, 260), price, font=_load_font(76), fill=(*ORANGE, 255), anchor='mm')
-        stats = f"{beds} BD  ÃÂ·  {baths} BA  ÃÂ·  {sqft} SQFT"
+        stats = f"{beds} BD  ·  {baths} BA  ·  {sqft} SQFT"
         draw.text((W//2, 345), stats, font=_load_font(30), fill=(*CREAM, 200), anchor='mm')
         _orange_bar(draw, 375, 40)
         fh = _load_font(42)
@@ -236,14 +229,13 @@ def build_frame(post_data, bg_img=None):
         for i, line in enumerate(hlines[:3]):
             draw.text((W//2, 430 + i*58), line, font=fh, fill=(*WHITE, 255), anchor='mm')
         if hl2:
-            fhl = _load_font(32)
-            draw.text((W//2, 615), hl2, font=fhl, fill=(*CREAM, 180), anchor='mm')
-        draw.text((W//2, 690), 'ÃÂ· DM US TO FIND YOURS ÃÂ·', font=_load_font(26), fill=(*ORANGE, 220), anchor='mm')
+            draw.text((W//2, 615), hl2, font=_load_font(32), fill=(*CREAM, 180), anchor='mm')
+        draw.text((W//2, 690), '· DM US TO FIND YOURS ·', font=_load_font(26), fill=(*ORANGE, 220), anchor='mm')
 
     elif ct == 'market_stat':
         stat    = post_data.get('stat', '')
         context = post_data.get('context', '')
-        draw.text((W//2, 85), 'SAN DIEGO MARKET', font=_load_font(28), fill=(*ORANGE, 230), anchor='mm')
+        draw.text((W//2, 85),  'SAN DIEGO MARKET', font=_load_font(28), fill=(*ORANGE, 230), anchor='mm')
         draw.text((W//2, 125), 'UPDATE', font=_load_font(28), fill=(*ORANGE, 230), anchor='mm')
         _orange_bar(draw, 155, 80)
         fs = _load_font(62)
@@ -255,13 +247,13 @@ def build_frame(post_data, bg_img=None):
         clines = _wrap(draw, context, fc, W - 80)
         for i, line in enumerate(clines[:2]):
             draw.text((W//2, 540 + i*50), line, font=fc, fill=(*CREAM, 190), anchor='mm')
-        draw.text((W//2, 680), 'ÃÂ· QUESTIONS? DM US ÃÂ·', font=_load_font(26), fill=(*ORANGE, 220), anchor='mm')
+        draw.text((W//2, 680), '· QUESTIONS? DM US ·', font=_load_font(26), fill=(*ORANGE, 220), anchor='mm')
 
     elif ct == 'buyer_seller_tip':
         tip_type = post_data.get('tip_type', 'PRO TIP').upper()
         headline = post_data.get('headline', '')
         tip      = post_data.get('tip', '')
-        draw.text((W//2, 80), tip_type, font=_load_font(30), fill=(*ORANGE, 230), anchor='mm')
+        draw.text((W//2, 80),  tip_type, font=_load_font(30), fill=(*ORANGE, 230), anchor='mm')
         _orange_bar(draw, 105, 60)
         fh = _load_font(54)
         hlines = _wrap(draw, headline, fh, W - 70)
@@ -272,11 +264,11 @@ def build_frame(post_data, bg_img=None):
         tlines = _wrap(draw, tip, ft, W - 90)
         for i, line in enumerate(tlines[:4]):
             draw.text((W//2, 375 + i*56), line, font=ft, fill=(*CREAM, 210), anchor='mm')
-        draw.text((W//2, 680), 'ÃÂ· READY? DM US ÃÂ·', font=_load_font(26), fill=(*ORANGE, 220), anchor='mm')
+        draw.text((W//2, 680), '· READY? DM US ·', font=_load_font(26), fill=(*ORANGE, 220), anchor='mm')
         _add_headshot(img, size=150)
 
     elif ct == 'investor_quote':
-        draw.text((W//2, 90), 'Ã¢ÂÂ', font=_load_font(72), fill=(*ORANGE, 200), anchor='mm')
+        draw.text((W//2, 90), '"', font=_load_font(72), fill=(*ORANGE, 200), anchor='mm')
         quote  = post_data.get('quote', '')
         author = post_data.get('author', '')
         fq = _load_font(44)
@@ -284,8 +276,8 @@ def build_frame(post_data, bg_img=None):
         for i, line in enumerate(qlines[:5]):
             draw.text((W//2, 180 + i*62), line, font=fq, fill=(*WHITE, 255), anchor='mm')
         _orange_bar(draw, 560, 60)
-        draw.text((W//2, 600), f'Ã¢ÂÂ {author}', font=_load_font(30), fill=(*ORANGE, 220), anchor='mm')
-        draw.text((W//2, 680), "ÃÂ· LET'S BUILD WEALTH ÃÂ·", font=_load_font(26), fill=(*CREAM, 180), anchor='mm')
+        draw.text((W//2, 600), f'— {author}', font=_load_font(30), fill=(*ORANGE, 220), anchor='mm')
+        draw.text((W//2, 680), "· LET'S BUILD WEALTH ·", font=_load_font(26), fill=(*CREAM, 180), anchor='mm')
         _add_headshot(img, size=130)
 
     elif ct == 'san_diego_lifestyle':
@@ -293,7 +285,7 @@ def build_frame(post_data, bg_img=None):
         hl   = post_data.get('headline', '')
         ll   = post_data.get('lifestyle_line', '')
         rt   = post_data.get('real_estate_tie', '')
-        draw.text((W//2, 85), 'LIFE IN', font=_load_font(30), fill=(*CREAM, 180), anchor='mm')
+        draw.text((W//2, 85),  'LIFE IN', font=_load_font(30), fill=(*CREAM, 180), anchor='mm')
         draw.text((W//2, 155), hood.upper(), font=_load_font(66), fill=(*ORANGE, 255), anchor='mm')
         _orange_bar(draw, 192, 80)
         fh = _load_font(46)
@@ -308,7 +300,33 @@ def build_frame(post_data, bg_img=None):
         rlines = _wrap(draw, rt, fr, W - 90)
         for i, line in enumerate(rlines[:2]):
             draw.text((W//2, 560 + i*48), line, font=fr, fill=(*ORANGE, 210), anchor='mm')
-        draw.text((W//2, 690), 'ÃÂ· FIND YOUR SD HOME Ã°ÂÂÂ ÃÂ·', font=_load_font(26), fill=(*WHITE, 200), anchor='mm')
+        draw.text((W//2, 690), '· FIND YOUR SD HOME 🌊 ·', font=_load_font(26), fill=(*WHITE, 200), anchor='mm')
+
+    # Also handle sd_hidden_gem content type
+    elif ct == 'sd_hidden_gem':
+        hood    = post_data.get('neighborhood', 'San Diego')
+        hl      = post_data.get('headline', '')
+        insight = post_data.get('insight', '')
+        stat    = post_data.get('stat', '')
+        context = post_data.get('context', '')
+        draw.text((W//2, 75),  'SD HIDDEN GEM', font=_load_font(26), fill=(*ORANGE, 230), anchor='mm')
+        draw.text((W//2, 135), hood.upper(), font=_load_font(58), fill=(*WHITE, 255), anchor='mm')
+        _orange_bar(draw, 170, 80)
+        fh = _load_font(40)
+        hlines = _wrap(draw, hl, fh, W - 80)
+        for i, line in enumerate(hlines[:2]):
+            draw.text((W//2, 230 + i*56), line, font=fh, fill=(*ORANGE, 240), anchor='mm')
+        fi = _load_font(30)
+        ilines = _wrap(draw, insight, fi, W - 80)
+        for i, line in enumerate(ilines[:4]):
+            draw.text((W//2, 360 + i*46), line, font=fi, fill=(*CREAM, 200), anchor='mm')
+        if stat:
+            draw.text((W//2, 570), str(stat), font=_load_font(64), fill=(*ORANGE, 255), anchor='mm')
+        if context:
+            fc = _load_font(28)
+            clines = _wrap(draw, context, fc, W - 80)
+            for i, line in enumerate(clines[:2]):
+                draw.text((W//2, 650 + i*40), line, font=fc, fill=(*CREAM, 180), anchor='mm')
 
     # Logo + headshot on every post
     _add_logo(img)
@@ -317,11 +335,13 @@ def build_frame(post_data, bg_img=None):
 
     return img.convert('RGB')
 
-def _gen_silence(path, duration=15, sample_rate=44100):
+def _gen_silence(path, duration=8, sample_rate=44100):
     samples = np.zeros(int(sample_rate * duration), dtype=np.int16)
     with wave.open(path, 'w') as wf:
-        wf.setnchannels(1); wf.setsampwidth(2)
-        wf.setframerate(sample_rate); wf.writeframes(samples.tobytes())
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(samples.tobytes())
 
 def _build_animated_frames(post_data, bg_img, tmp_dir):
     """
@@ -331,23 +351,20 @@ def _build_animated_frames(post_data, bg_img, tmp_dir):
     total_frames = DURATION * FPS
     ct = post_data.get('content_type', 'market_stat')
 
-    # Phase 1: bg fade in (0.5s)
-    # Phase 2: text elements fade in sequentially
-    # Phase 3: hold
-    bg_phase  = int(FPS * 0.5)
-    hold_end  = total_frames
+    bg_phase = int(FPS * 0.5)
+    bg_base  = _dark_overlay(bg_img)
 
-    frames = []
-    bg_base = _dark_overlay(bg_img)
+    log.info(f'Rendering {total_frames} frames...')
 
     for f in range(total_frames):
-        # Background alpha
+        if f % 20 == 0:
+            log.info(f'  Frame {f}/{total_frames}')
+
         if f < bg_phase:
             bg_alpha = int(255 * f / bg_phase)
         else:
             bg_alpha = 255
 
-        # Create frame with faded background
         frame = Image.new('RGBA', (W, H), (0, 0, 0, 255))
         faded_bg = bg_base.copy()
         if bg_alpha < 255:
@@ -355,16 +372,13 @@ def _build_animated_frames(post_data, bg_img, tmp_dir):
             faded_bg = enhancer.enhance(bg_alpha / 255.0)
         frame = Image.alpha_composite(frame, faded_bg.convert('RGBA'))
 
-        # Add accent bars always
         draw = ImageDraw.Draw(frame)
         draw.rectangle([(0, 0), (W, 6)], fill=(*ORANGE, 255))
         draw.rectangle([(0, H - 6), (W, H)], fill=(*ORANGE, 255))
 
-        # Text fade starts after bg phase
         text_frame = max(0, f - bg_phase)
-
-        # Build text with fade Ã¢ÂÂ 3 text elements each taking FADE_FRAMES
         element_count = 3
+
         for elem in range(element_count):
             elem_start = elem * FADE_FRAMES
             elem_alpha = min(255, max(0, int(255 * (text_frame - elem_start) / FADE_FRAMES)))
@@ -374,10 +388,8 @@ def _build_animated_frames(post_data, bg_img, tmp_dir):
             if ct == 'market_stat':
                 stat    = post_data.get('stat', '')
                 context = post_data.get('context', '')
-                author  = 'Whitney Pierce | Whissel Beer Group'
                 if elem == 0:
-                    t = f'SAN DIEGO MARKET\nUPDATE'
-                    for li, line in enumerate(t.split('\n')):
+                    for li, line in enumerate(['SAN DIEGO MARKET', 'UPDATE']):
                         draw.text((W//2, 85 + li*40), line, font=_load_font(28),
                                   fill=(*ORANGE, elem_alpha), anchor='mm')
                     x = (W - 80) // 2
@@ -394,26 +406,23 @@ def _build_animated_frames(post_data, bg_img, tmp_dir):
                     for i, line in enumerate(clines[:2]):
                         draw.text((W//2, 540 + i*50), line, font=fc,
                                   fill=(*CREAM, elem_alpha), anchor='mm')
-                    draw.text((W//2, 680), 'ÃÂ· QUESTIONS? DM US ÃÂ·',
+                    draw.text((W//2, 680), '· QUESTIONS? DM US ·',
                               font=_load_font(26), fill=(*ORANGE, elem_alpha), anchor='mm')
             else:
-                # For other types, just show the full frame at elem 1+
                 if elem >= 1:
                     full = build_frame(post_data, bg_img)
                     frame = full.convert('RGBA')
                     draw = ImageDraw.Draw(frame)
-                break
+                    break
 
-        # Logo always visible after bg phase
         if f >= bg_phase:
             _add_logo(frame)
             _add_headshot(frame, size=120)
 
         frame_path = os.path.join(tmp_dir, f'f{f:05d}.jpg')
         frame.convert('RGB').save(frame_path, 'JPEG', quality=82)
-        frames.append(frame_path)
 
-    return frames
+    log.info('Frame rendering complete.')
 
 def generate_reel(post_data: dict) -> str:
     cloudinary.config(
@@ -426,16 +435,17 @@ def generate_reel(post_data: dict) -> str:
     tmp = tempfile.mkdtemp(prefix='wbg_')
 
     try:
-        # Get background photo
+        log.info('Fetching background...')
         bg_img = _get_background(content_type)
+        log.info('Background ready. Building frames...')
 
-        # Build animated frames
         _build_animated_frames(post_data, bg_img, tmp)
 
-        # Silent audio
+        log.info('Generating silent audio...')
         audio_path = os.path.join(tmp, 'audio.wav')
         _gen_silence(audio_path, DURATION)
 
+        log.info('Running ffmpeg...')
         out_path = os.path.join(tmp, 'reel.mp4')
         cmd = [
             imageio_ffmpeg.get_ffmpeg_exe(), '-y',
@@ -447,12 +457,20 @@ def generate_reel(post_data: dict) -> str:
             '-c:a', 'aac', '-b:a', '64k', '-shortest',
             out_path
         ]
-        subprocess.run(cmd, check=True, capture_output=True, timeout=180)
+        result = subprocess.run(cmd, check=True, capture_output=True, timeout=120)
+        log.info('ffmpeg complete.')
 
-        result = cloudinary.uploader.upload_large(
-            out_path, resource_type='video',
-            public_id='wbg_daily_reel', overwrite=True
+        log.info('Uploading to Cloudinary...')
+        upload_result = cloudinary.uploader.upload_large(
+            out_path,
+            resource_type='video',
+            public_id='wbg_daily_reel',
+            overwrite=True,
+            timeout=120
         )
-        return result['secure_url']
+        url = upload_result['secure_url']
+        log.info(f'Cloudinary upload complete: {url}')
+        return url
+
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
