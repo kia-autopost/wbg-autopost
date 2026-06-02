@@ -44,7 +44,11 @@ WHITE      = (255, 255, 255)
 CREAM      = (245, 240, 235)
 GRAY       = (160, 160, 160)
 
-UNSPLASH_KEY = os.getenv('UNSPLASH_ACCESS_KEY', '')
+UNSPLASH_KEY   = os.getenv('UNSPLASH_ACCESS_KEY', '')
+AGENT_NAME     = 'Whitney Pierce'
+AGENT_TITLE    = 'Whissel Beer Group | eXp Realty'
+AGENT_PHONE    = '925-940-3025'
+AGENT_HANDLE   = '@Whitney_Pierce_WBG'
 
 SD_QUERIES = {
     'property_spotlight': ['luxury home san diego', 'modern house california', 'beach house san diego', 'mediterranean villa'],
@@ -224,7 +228,7 @@ def build_frame(post_data, bg_img=None):
         draw.text((W//2, 140), hood.upper(), font=_load_font(58), fill=(*WHITE, 255), anchor='mm')
         _orange_bar(draw, 178, 80)
         draw.text((W//2, 260), price, font=_load_font(76), fill=(*ORANGE, 255), anchor='mm')
-        stats = f"{beds} BD  Â·  {baths} BA  Â·  {sqft} SQFT"
+        stats = f"{beds} BD  ÃÂ·  {baths} BA  ÃÂ·  {sqft} SQFT"
         draw.text((W//2, 345), stats, font=_load_font(30), fill=(*CREAM, 200), anchor='mm')
         _orange_bar(draw, 375, 40)
         fh = _load_font(42)
@@ -234,7 +238,7 @@ def build_frame(post_data, bg_img=None):
         if hl2:
             fhl = _load_font(32)
             draw.text((W//2, 615), hl2, font=fhl, fill=(*CREAM, 180), anchor='mm')
-        draw.text((W//2, 690), 'Â· DM US TO FIND YOURS Â·', font=_load_font(26), fill=(*ORANGE, 220), anchor='mm')
+        draw.text((W//2, 690), 'ÃÂ· DM US TO FIND YOURS ÃÂ·', font=_load_font(26), fill=(*ORANGE, 220), anchor='mm')
 
     elif ct == 'market_stat':
         stat    = post_data.get('stat', '')
@@ -251,7 +255,7 @@ def build_frame(post_data, bg_img=None):
         clines = _wrap(draw, context, fc, W - 80)
         for i, line in enumerate(clines[:2]):
             draw.text((W//2, 540 + i*50), line, font=fc, fill=(*CREAM, 190), anchor='mm')
-        draw.text((W//2, 680), 'Â· QUESTIONS? DM US Â·', font=_load_font(26), fill=(*ORANGE, 220), anchor='mm')
+        draw.text((W//2, 680), 'ÃÂ· QUESTIONS? DM US ÃÂ·', font=_load_font(26), fill=(*ORANGE, 220), anchor='mm')
 
     elif ct == 'buyer_seller_tip':
         tip_type = post_data.get('tip_type', 'PRO TIP').upper()
@@ -268,11 +272,11 @@ def build_frame(post_data, bg_img=None):
         tlines = _wrap(draw, tip, ft, W - 90)
         for i, line in enumerate(tlines[:4]):
             draw.text((W//2, 375 + i*56), line, font=ft, fill=(*CREAM, 210), anchor='mm')
-        draw.text((W//2, 680), 'Â· READY? DM US Â·', font=_load_font(26), fill=(*ORANGE, 220), anchor='mm')
+        draw.text((W//2, 680), 'ÃÂ· READY? DM US ÃÂ·', font=_load_font(26), fill=(*ORANGE, 220), anchor='mm')
         _add_headshot(img, size=150)
 
     elif ct == 'investor_quote':
-        draw.text((W//2, 90), 'â', font=_load_font(72), fill=(*ORANGE, 200), anchor='mm')
+        draw.text((W//2, 90), 'Ã¢ÂÂ', font=_load_font(72), fill=(*ORANGE, 200), anchor='mm')
         quote  = post_data.get('quote', '')
         author = post_data.get('author', '')
         fq = _load_font(44)
@@ -280,8 +284,8 @@ def build_frame(post_data, bg_img=None):
         for i, line in enumerate(qlines[:5]):
             draw.text((W//2, 180 + i*62), line, font=fq, fill=(*WHITE, 255), anchor='mm')
         _orange_bar(draw, 560, 60)
-        draw.text((W//2, 600), f'â {author}', font=_load_font(30), fill=(*ORANGE, 220), anchor='mm')
-        draw.text((W//2, 680), "Â· LET'S BUILD WEALTH Â·", font=_load_font(26), fill=(*CREAM, 180), anchor='mm')
+        draw.text((W//2, 600), f'Ã¢ÂÂ {author}', font=_load_font(30), fill=(*ORANGE, 220), anchor='mm')
+        draw.text((W//2, 680), "ÃÂ· LET'S BUILD WEALTH ÃÂ·", font=_load_font(26), fill=(*CREAM, 180), anchor='mm')
         _add_headshot(img, size=130)
 
     elif ct == 'san_diego_lifestyle':
@@ -304,7 +308,7 @@ def build_frame(post_data, bg_img=None):
         rlines = _wrap(draw, rt, fr, W - 90)
         for i, line in enumerate(rlines[:2]):
             draw.text((W//2, 560 + i*48), line, font=fr, fill=(*ORANGE, 210), anchor='mm')
-        draw.text((W//2, 690), 'Â· FIND YOUR SD HOME ð Â·', font=_load_font(26), fill=(*WHITE, 200), anchor='mm')
+        draw.text((W//2, 690), 'ÃÂ· FIND YOUR SD HOME Ã°ÂÂÂ ÃÂ·', font=_load_font(26), fill=(*WHITE, 200), anchor='mm')
 
     # Logo + headshot on every post
     _add_logo(img)
@@ -359,7 +363,7 @@ def _build_animated_frames(post_data, bg_img, tmp_dir):
         # Text fade starts after bg phase
         text_frame = max(0, f - bg_phase)
 
-        # Build text with fade â 3 text elements each taking FADE_FRAMES
+        # Build text with fade Ã¢ÂÂ 3 text elements each taking FADE_FRAMES
         element_count = 3
         for elem in range(element_count):
             elem_start = elem * FADE_FRAMES
@@ -390,7 +394,7 @@ def _build_animated_frames(post_data, bg_img, tmp_dir):
                     for i, line in enumerate(clines[:2]):
                         draw.text((W//2, 540 + i*50), line, font=fc,
                                   fill=(*CREAM, elem_alpha), anchor='mm')
-                    draw.text((W//2, 680), 'Â· QUESTIONS? DM US Â·',
+                    draw.text((W//2, 680), 'ÃÂ· QUESTIONS? DM US ÃÂ·',
                               font=_load_font(26), fill=(*ORANGE, elem_alpha), anchor='mm')
             else:
                 # For other types, just show the full frame at elem 1+
