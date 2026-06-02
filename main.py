@@ -116,3 +116,25 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     log.info(f'WBG Auto-Poster starting on port {port}')
     app.run(host='0.0.0.0', port=port)
+    @app.route('/debug', methods=['GET', 'POST'])
+def debug_post():
+    log.info('Debug test triggered — running synchronously')
+    try:
+        ct = CONTENT_TYPES[0]
+        post_data = generate_post(ct, ANTHROPIC_KEY)
+        log.info(f'✅ Content generated: {ct}')
+        video_url = generate_reel(post_data)
+        log.info(f'✅ Video ready: {video_url}')
+        result = post_reel_to_instagram(
+            video_url, post_data['caption'],
+            IG_USER_ID, IG_TOKEN, CLD_CLOUD, CLD_KEY, CLD_SECRET
+        )
+        log.info(f'✅ Posted! ID: {result}')
+        return jsonify({'status': 'success', 'instagram_id': result}), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'step_failed': type(e).__name__,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
