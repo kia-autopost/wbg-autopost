@@ -1,7 +1,6 @@
 """WBG Instagram API - posts Reels to Instagram and Facebook."""
 import os, time, logging, requests
 import cloudinary, cloudinary.uploader
-
 log = logging.getLogger('WBG')
 
 def _upload_to_cloudinary(video_path, cloud, key, secret):
@@ -16,20 +15,7 @@ def _upload_to_cloudinary(video_path, cloud, key, secret):
     return result['secure_url']
 
 def _refresh_token(access_token):
-    app_id     = os.getenv('META_APP_ID')
-    app_secret = os.getenv('META_APP_SECRET')
-    if not app_id or not app_secret:
-        return access_token
-    r = requests.get(
-        'https://graph.facebook.com/v19.0/oauth/access_token',
-        params={'grant_type':'fb_exchange_token','client_id':app_id,
-                'client_secret':app_secret,'fb_exchange_token':access_token}
-    )
-    data = r.json()
-    if 'access_token' in data:
-        log.info('Instagram token refreshed successfully')
-        return data['access_token']
-    log.warning(f'Token refresh failed: {data}')
+    # Long-lived token managed manually — no refresh needed
     return access_token
 
 def _create_container(ig_user_id, access_token, video_url, caption):
