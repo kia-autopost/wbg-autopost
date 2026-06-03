@@ -362,8 +362,8 @@ def _render_light(img, draw, post_data, f):
     PAD = 45; CX = W//2
     PANEL_TOP = int(H * 0.52)
 
-    T = {'label':int(FPS*0.4), 'hood':int(FPS*0.85), 'rule':int(FPS*1.4),
-         'hl':int(FPS*1.8), 'body':int(FPS*2.6), 'stat':int(FPS*3.3)}
+    T = {'label':int(FPS*0.4), 'hood':int(FPS*0.85), 'rule':int(FPS*1.3),
+         'hl':int(FPS*1.6), 'stat':int(FPS*2.2), 'body':int(FPS*2.8)}
 
     # Label - top of photo, white, more visible
     al = _a(f,T['label'],18); yo = _y(f,T['label'],18)
@@ -401,19 +401,19 @@ def _render_light(img, draw, post_data, f):
             y_cur += fsz + 10
         hl_bottom = y_cur + yo
 
-    # Stat - right after headline, before body
+    # Stat - below headline with guaranteed clearance
     al = _a(f,T['stat'],18); yo = _y(f,T['stat'],18)
-    stat_bottom = hl_bottom
+    stat_bottom = hl_bottom + 60
     if al and stat:
         stat_short = stat[:20].rsplit(' ',1)[0] if len(stat) > 20 else stat
-        for ssz in [58,46,38,30]:
+        for ssz in [52,42,34,28]:
             fs = _font('oswald_bold', ssz)
             if draw.textbbox((0,0),stat_short,font=fs)[2] <= W-PAD*2: break
-        stat_y = hl_bottom + 20
-        # Cap so stat doesn't go into logo zone
-        stat_y = min(stat_y, H-320)
+        # Always at least 40px below hl_bottom, never in logo zone
+        stat_y = max(hl_bottom + 40, PANEL_TOP + 200)
+        stat_y = min(stat_y, H - 310)
         _paste(img, stat_short, fs, CX, stat_y+yo, ORANGE, al)
-        stat_bottom = stat_y + ssz + yo + 10
+        stat_bottom = stat_y + ssz + 15
 
     # Body - darker, more visible, after stat
     al = _a(f,T['body'],20); yo = _y(f,T['body'],20)
