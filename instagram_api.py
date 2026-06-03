@@ -3,6 +3,9 @@ import os, time, logging, requests
 import cloudinary, cloudinary.uploader
 log = logging.getLogger('WBG')
 
+# Long-lived token - valid for 60 days from June 2, 2026
+IG_ACCESS_TOKEN = "EAAXXdtljzesBRmV284OC2FAflAKhbACJ1dXxhZCLyo44F2iiS8OrmQHJjbkV4ZCEZAnV9baRDyoZCgoEjuUlKRe15hkBG6ZBlixU8iVDvv2CjcRihVaPWicSWU8zHlFUvASRSWBG4IssE4U22X1qe0yItjNmWBXzUGYc8mqTyZCTYn1G33pE2KolzRhIIViDambSovJ61TdGicNE54I0dZAMMrGDCa08KQ5jgBFmT5ZAf7PSZAHByB3qqfZAqRCZAsSNN72BM1kWyusUs3XvbEZBopf0iAZDZD"
+
 def _upload_to_cloudinary(video_path, cloud, key, secret):
     if isinstance(video_path, str) and video_path.startswith('http'):
         log.info(f"Using existing video URL: {video_path}")
@@ -14,42 +17,42 @@ def _upload_to_cloudinary(video_path, cloud, key, secret):
     )
     return result['secure_url']
 
-def _refresh_token(access_token):
-    # Long-lived token managed manually — no refresh needed
-    return access_token
-
-def _create_container(ig_user_id, access_token, video_url, caption):
+def _create_container(ig_user_id, video_url, caption):
     log.info('Creating Instagram media container...')
     r = requests.post(
         f'https://graph.facebook.com/v21.0/{ig_user_id}/media',
-        params={'media_type':'REELS','video_url':video_url,
-                'caption':caption,'share_to_feed':'true',
-                'access_token':access_token}
+        params={
+            'media_type': 'REELS',
+            'video_url': video_url,
+            'caption': caption,
+            'share_to_feed': 'true',
+            'access_token': IG_ACCESS_TOKEN
+        }
     )
     r.raise_for_status()
     cid = r.json()['id']
     log.info(f'Container ID: {cid}')
     return cid
 
-def _wait_for_ready(container_id, access_token, max_wait=300):
+def _wait_for_ready(container_id, max_wait=300):
     log.info('Waiting for video to process...')
     for _ in range(max_wait // 10):
         time.sleep(10)
         r = requests.get(
             f'https://graph.facebook.com/v21.0/{container_id}',
-            params={'fields':'status_code','access_token':access_token}
+            params={'fields': 'status_code', 'access_token': IG_ACCESS_TOKEN}
         )
-        status = r.json().get('status_code','')
+        status = r.json().get('status_code', '')
         log.info(f'  Status: {status}')
         if status == 'FINISHED': return True
         if status == 'ERROR': raise RuntimeError('Video processing failed')
     raise TimeoutError('Video processing timed out')
 
-def _publish(ig_user_id, access_token, container_id):
+def _publish(ig_user_id, container_id):
     log.info('Publishing reel...')
     r = requests.post(
         f'https://graph.facebook.com/v21.0/{ig_user_id}/media_publish',
-        params={'creation_id':container_id,'access_token':access_token}
+        params={'creation_id': container_id, 'access_token': IG_ACCESS_TOKEN}
     )
     r.raise_for_status()
     media_id = r.json()['id']
@@ -57,8 +60,8 @@ def _publish(ig_user_id, access_token, container_id):
     return media_id
 
 def post_reel_to_instagram(video_path, caption, ig_user_id, access_token, cld_cloud, cld_key, cld_secret):
-    access_token = _refresh_token(access_token)
+    log.info(f'Using hardcoded token: {IG_ACCESS_TOKEN[:20]}...')
     video_url    = _upload_to_cloudinary(video_path, cld_cloud, cld_key, cld_secret)
-    container_id = _create_container(ig_user_id, access_token, video_url, caption)
-    _wait_for_ready(container_id, access_token)
-    return _publish(ig_user_id, access_token, container_id)
+    container_id = _create_container(ig_user_id, video_url, caption)
+    _wait_for_ready(container_id)
+    return _publish(ig_user_id, container_id)
