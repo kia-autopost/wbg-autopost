@@ -67,6 +67,54 @@ def test_post():
     t.start()
     return jsonify({'status': 'started', 'message': 'Generating — check Instagram in ~4 min!'}), 200
 
+@app.route('/test_market', methods=['GET', 'POST'])
+def test_market():
+    if _post_lock.locked():
+        return jsonify({'status': 'busy'}), 429
+    log.info('Market data test triggered')
+    def _run():
+        from content_generator import generate_post
+        import random as _r
+        if not _post_lock.acquire(blocking=False): return
+        try:
+            post_data = generate_post('market_data', ANTHROPIC_KEY)
+            log.info(f'Market data: {post_data.get("neighborhood","")}')
+            video_url = generate_reel(post_data)
+            result = post_reel_to_instagram(video_url, post_data['caption'],
+                IG_USER_ID, IG_TOKEN, CLD_CLOUD, CLD_KEY, CLD_SECRET)
+            log.info(f'Posted market data! ID: {result}')
+        except Exception as e:
+            log.error(f'Market test failed: {e}')
+            log.error(traceback.format_exc())
+        finally:
+            _post_lock.release()
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({'status': 'started', 'type': 'market_data'}), 200
+
+@app.route('/test_hometour', methods=['GET', 'POST'])
+def test_hometour():
+    if _post_lock.locked():
+        return jsonify({'status': 'busy'}), 429
+    log.info('Home tour test triggered')
+    def _run():
+        import random as _r
+        from content_generator import generate_post
+        if not _post_lock.acquire(blocking=False): return
+        try:
+            post_data = generate_post('home_tour', ANTHROPIC_KEY)
+            log.info(f'Home tour: {post_data.get("neighborhood","")} {post_data.get("price","")}')
+            video_url = generate_reel(post_data)
+            result = post_reel_to_instagram(video_url, post_data['caption'],
+                IG_USER_ID, IG_TOKEN, CLD_CLOUD, CLD_KEY, CLD_SECRET)
+            log.info(f'Posted home tour! ID: {result}')
+        except Exception as e:
+            log.error(f'Home tour test failed: {e}')
+            log.error(traceback.format_exc())
+        finally:
+            _post_lock.release()
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({'status': 'started', 'type': 'home_tour'}), 200
+
 @app.route('/health')
 def health():
     return jsonify({
