@@ -1,0 +1,73 @@
+#!/bin/bash
+declare -A photos=(
+  ["sd_beach_1"]="1506905925346-21bda4d32df4"
+  ["sd_beach_2"]="1507525428034-b723cf961d3e"
+  ["sd_coast_1"]="1558618666-fcd25c85cd64"
+  ["sd_coast_2"]="1519046904885-b8b3f992a0e1"
+  ["sd_palms_1"]="1449844908441-8829872d2607"
+  ["sd_palms_2"]="1471119987473-be6b5ce5ba0a"
+  ["luxury_home_1"]="1564013799919-ab600027ffc6"
+  ["luxury_home_2"]="1600596542815-ffad4c1539a9"
+  ["luxury_home_3"]="1600585154340-be6161a56a0c"
+  ["luxury_home_4"]="1568605114967-8130f3a36994"
+  ["luxury_home_5"]="1512917774080-9991f1c4c750"
+  ["luxury_home_6"]="1580587771525-4f2c0a5e3c3a"
+  ["modern_interior_1"]="1586023492125-27b2c045efd7"
+  ["modern_interior_2"]="1560448204-e02f11c3d0e2"
+  ["modern_interior_3"]="1618221195710-dd6b41faaea6"
+  ["modern_interior_4"]="1583608205776-bfd35f0d9f83"
+  ["modern_interior_5"]="1484154218962-a197022b5858"
+  ["pool_home_1"]="1575517111839-3a3843ee7f5d"
+  ["pool_home_2"]="1523217582562-09d05c2d8f6c"
+  ["aerial_city_1"]="1477959858617-67f85cf4f1df"
+  ["aerial_city_2"]="1444723121867-7a241cacace9"
+  ["sunset_1"]="1469474968028-56623f02e42e"
+  ["sunset_2"]="1516912481800-0ee67b51c4a3"
+  ["sunset_3"]="1502790402395-f8d0e9e35b87"
+  ["california_street_1"]="1558277476-5b21a5ac3d70"
+  ["california_street_2"]="1572120360610-d8eb9c9f3948"
+  ["neighborhood_1"]="1560518883-ce09059eeffa"
+  ["neighborhood_2"]="1599427303058-f04cbcf4756f"
+  ["neighborhood_3"]="1570129477492-45c003edd2be"
+  ["neighborhood_4"]="1602941525421-8f8a81d4f3e7"
+  ["kitchen_1"]="1556909114-f6e7ad7d3136"
+  ["kitchen_2"]="1507089947277-f68a7fc2e8e0"
+  ["living_room_1"]="1555041469-db61528b0e34"
+  ["living_room_2"]="1567016432779-094069958ea5"
+  ["bedroom_1"]="1522771739844-6a9136b15f84"
+  ["backyard_1"]="1558618047-3c8c76ca7d13"
+  ["backyard_2"]="1617806118233-18e1de247200"
+  ["craftsman_1"]="1505843516080-5e842a28e20a"
+  ["craftsman_2"]="1510627489277-73d8b7463c0b"
+  ["condo_1"]="1545324418-cc1a3fa10c00"
+  ["downtown_1"]="1477959858617-67f85cf4f1df"
+  ["downtown_2"]="1486325212027-8081e485255e"
+  ["ocean_view_1"]="1505118380757-91f5f5632de0"
+  ["ocean_view_2"]="1519046904885-b8b3f992a0e1"
+  ["palm_sunset_1"]="1476514525535-07fb3b4ae5f1"
+  ["palm_sunset_2"]="1502086223501-7ea6ecd79368"
+  ["modern_house_1"]="1600047509807-ba8f99d2cdde"
+  ["modern_house_2"]="1600566753190-17f0baa2a6c3"
+  ["modern_house_3"]="1576941089067-2de3c901b126"
+  ["garage_home_1"]="1558036117-58b5d45f4854"
+)
+
+BASE="https://images.unsplash.com/photo-"
+PARAMS="?w=800&h=1200&fit=crop&q=80"
+COUNT=0
+
+for name in "${!photos[@]}"; do
+  id="${photos[$name]}"
+  url="${BASE}${id}${PARAMS}"
+  curl -s -L -o "${name}.jpg" "$url"
+  if [ -f "${name}.jpg" ] && [ $(wc -c < "${name}.jpg") -gt 10000 ]; then
+    echo "✅ ${name}.jpg"
+    COUNT=$((COUNT+1))
+  else
+    echo "❌ ${name}"
+    rm -f "${name}.jpg"
+  fi
+done
+
+echo ""
+echo "Downloaded: $COUNT photos"
