@@ -122,21 +122,24 @@ def _fetch_background(content_type, neighborhood=None):
         except Exception as e:
             log.warning(f'Unsplash failed: {e}')
 
-    # 2. Try Pexels (free, no key needed for static URLs)
+    # 2. Try Pexels - curated San Diego / real estate photos
     try:
-        pexels_photos = [
-            'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg',  # luxury home
-            'https://images.pexels.com/photos/259588/pexels-photo-259588.jpeg',    # modern house
-            'https://images.pexels.com/photos/2102587/pexels-photo-2102587.jpeg',  # aerial city
-            'https://images.pexels.com/photos/1642125/pexels-photo-1642125.jpeg',  # beach sunset
-            'https://images.pexels.com/photos/2467285/pexels-photo-2467285.jpeg',  # modern interior
-            'https://images.pexels.com/photos/3935333/pexels-photo-3935333.jpeg',  # coastal
-            'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg',  # luxury interior
-            'https://images.pexels.com/photos/323780/pexels-photo-323780.jpeg',    # house exterior
-            'https://images.pexels.com/photos/2119714/pexels-photo-2119714.jpeg',  # san diego coast
-            'https://images.pexels.com/photos/1029599/pexels-photo-1029599.jpeg',  # modern home
-        ]
-        url = random.choice(pexels_photos) + f'?auto=compress&cs=tinysrgb&w={bg_w}&h={bg_h}&fit=crop'
+        # Content-type specific photo pools - all SD/real estate relevant
+        pexels_by_type = {
+            'sd_hidden_gem':      ['2119714','1308940','2373488','3935333','1029599'],
+            'sd_lifestyle_hook':  ['1642125','2559941','3849407','1174732','2422915'],
+            'market_stat':        ['2102587','1732414','2119714','3849407','1396122'],
+            'hot_take':           ['1571460','2467285','1396122','259588','1029599'],
+            'buyer_seller_tip':   ['1571460','2467285','3935333','1396122','323780'],
+            'hyper_local_intel':  ['2119714','1308940','259588','323780','1396122'],
+            'current_event_tie':  ['2119714','3849407','2102587','1732414','2559941'],
+            'property_spotlight': ['1396122','259588','1029599','323780','2467285'],
+            'investor_quote':     ['2102587','1732414','3849407','1571460','2467285'],
+            'san_diego_lifestyle':['1642125','2559941','2422915','1174732','2119714'],
+        }
+        photo_ids = pexels_by_type.get(content_type, ['2119714','1396122','1642125','2102587','1571460'])
+        photo_id  = random.choice(photo_ids)
+        url = f'https://images.pexels.com/photos/{photo_id}/pexels-photo-{photo_id}.jpeg?auto=compress&cs=tinysrgb&w={bg_w}&h={bg_h}&fit=crop'
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=10) as r:
             img_data = r.read()
@@ -167,16 +170,19 @@ def _gradient():
 # ─── KEN BURNS ───────────────────────────────────────────────────────────────
 
 def _ken_burns(bg, f, total):
+    """Smooth slow zoom in - fixed center, no jitter."""
     t   = f / max(total - 1, 1)
     t_e = t * t * (3 - 2 * t)
     bw, bh = bg.size
-    cw = max(W, int(W + (bw - W) * (1 - t_e) * 0.45))
-    ch = max(H, int(H + (bh - H) * (1 - t_e) * 0.45))
-    cw = min(cw, bw); ch = min(ch, bh)
-    cx = bw//2 + int(18*(1-t_e))
-    cy = bh//2 + int(12*(1-t_e))
-    l  = max(0, min(cx-cw//2, bw-cw))
-    tp = max(0, min(cy-ch//2, bh-ch))
+    # Scale from 1.08x down to 1.0x
+    scale = 1.08 + (1.0 - 1.08) * t_e
+    cw = max(W, min(int(W * scale), bw))
+    ch = max(H, min(int(H * scale), bh))
+    # Fixed center - no drift
+    cx = bw // 2
+    cy = bh // 2
+    l  = max(0, min(cx - cw//2, bw - cw))
+    tp = max(0, min(cy - ch//2, bh - ch))
     cropped = bg.crop((l, tp, l+cw, tp+ch))
     if cropped.size != (W, H):
         cropped = cropped.resize((W, H), Image.LANCZOS)
@@ -242,7 +248,7 @@ def _txt_backed(img, draw, text, font, x, y, color, alpha, anchor='mm', pad_x=20
     back = Image.new('RGBA', (W,H), (0,0,0,0))
     bd = ImageDraw.Draw(back)
     bd.rounded_rectangle([(bx1,by1),(bx2,by2)], radius=6,
-                          fill=(0,0,0,int(alpha*0.55)))
+                          fill=(0,0,0,int(alpha*0.78)))
     img.paste(back, mask=back)
     _txt(img, text, font, x, y, color, alpha, anchor)
 
