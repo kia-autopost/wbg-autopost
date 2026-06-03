@@ -33,46 +33,22 @@ BLACK  = (8, 8, 8)
 
 FONT_CACHE = {}
 
-# Working Google Fonts direct download URLs (bunny.net CDN mirror - reliable)
-GOOGLE_FONTS = {
-    'oswald_bold':    'https://fonts.bunny.net/oswald/files/oswald-latin-700-normal.woff2',
-    'oswald_regular': 'https://fonts.bunny.net/oswald/files/oswald-latin-400-normal.woff2',
-    'raleway_regular':'https://fonts.bunny.net/raleway/files/raleway-latin-400-normal.woff2',
+# Local font paths - all in assets folder
+FONT_FILES = {
+    'oswald_bold':    'Oswald-VariableFont_wght.ttf',
+    'oswald_regular': 'Oswald-VariableFont_wght.ttf',
+    'raleway_regular':'Raleway-VariableFont_wght.ttf',
+    'caladea':        'Caladea-Regular.ttf',
 }
 
-# Fallback: use bundled Caladea
 def _get_font_path(name):
-    cache_dir = '/tmp/wbg_fonts'
-    os.makedirs(cache_dir, exist_ok=True)
-    # woff2 won't work with PIL - use TTF from Google APIs instead
-    ttf_urls = {
-        'oswald_bold':    'https://github.com/googlefonts/OswaldFont/raw/main/fonts/TTF/Oswald-Bold.ttf',
-        'oswald_regular': 'https://github.com/googlefonts/OswaldFont/raw/main/fonts/TTF/Oswald-Regular.ttf',
-        'raleway_regular':'https://github.com/googlefonts/Raleway/raw/main/fonts/ttf/Raleway-Regular.ttf',
-    }
-    path = os.path.join(cache_dir, f'{name}.ttf')
-    if os.path.exists(path) and os.path.getsize(path) > 10000:
+    filename = FONT_FILES.get(name, 'Caladea-Regular.ttf')
+    path = os.path.join(ASSETS_DIR, filename)
+    if os.path.exists(path):
         return path
-    url = ttf_urls.get(name)
-    if not url:
-        return None
-    try:
-        log.info(f'Downloading font: {name}')
-        req = urllib.request.Request(url, headers={
-            'User-Agent': 'Mozilla/5.0',
-            'Accept': '*/*',
-        })
-        with urllib.request.urlopen(req, timeout=15) as r:
-            data = r.read()
-        if len(data) < 10000:
-            raise ValueError(f'Font too small: {len(data)} bytes')
-        with open(path, 'wb') as f:
-            f.write(data)
-        log.info(f'Font cached: {name} ({len(data)} bytes)')
-        return path
-    except Exception as e:
-        log.warning(f'Font download failed for {name}: {e}')
-        return None
+    # Final fallback
+    caladea = os.path.join(ASSETS_DIR, 'Caladea-Regular.ttf')
+    return caladea if os.path.exists(caladea) else None
 
 def _font(name, size):
     key = (name, size)
@@ -86,15 +62,6 @@ def _font(name, size):
             return f
         except Exception as e:
             log.warning(f'Failed to load {name} at {size}: {e}')
-    # Fallback to Caladea
-    caladea = os.path.join(ASSETS_DIR, 'Caladea-Regular.ttf')
-    if os.path.exists(caladea):
-        try:
-            f = ImageFont.truetype(caladea, size)
-            FONT_CACHE[key] = f
-            return f
-        except:
-            pass
     return ImageFont.load_default()
 
 # ─── BACKGROUND ──────────────────────────────────────────────────────────────
@@ -466,11 +433,6 @@ def generate_reel(post_data: dict) -> str:
     )
     tmp = tempfile.mkdtemp(prefix='wbg_')
     try:
-        # Pre-cache fonts
-        log.info('Caching fonts...')
-        for name in ['oswald_bold','oswald_regular','raleway_regular']:
-            _get_font_path(name)
-
         # Logo (loaded once)
         logo = None
         for name in [PREFERRED_LOGO]+FALLBACK_LOGOS:
