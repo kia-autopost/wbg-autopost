@@ -415,17 +415,17 @@ def _render_light(img, draw, post_data, f):
         _paste(img, stat_short, fs, CX, stat_y+yo, ORANGE, al)
         stat_bottom = stat_y + ssz + yo + 10
 
-    # Body - raleway small, after stat
+    # Body - darker, more visible, after stat
     al = _a(f,T['body'],20); yo = _y(f,T['body'],20)
     if al and body:
-        fb = _font('raleway', 22)
-        body_short = body[:100].rsplit(' ',1)[0] if len(body) > 100 else body
+        fb = _font('raleway', 24)
+        body_short = body[:110].rsplit(' ',1)[0] if len(body) > 110 else body
         blines = _wrap(draw, body_short, fb, W-PAD*2)
-        y_cur = stat_bottom + 16
+        y_cur = stat_bottom + 22
         for line in blines[:2]:
-            if y_cur + yo < H - 280:  # never overlap logo
-                _paste(img, line, fb, CX, y_cur+yo, LTGRAY, int(al*0.80))
-                y_cur += 30
+            if y_cur + yo < H - 250:  # never overlap logo
+                _paste(img, line, fb, CX, y_cur+yo, DKGRAY, int(al*0.70))
+                y_cur += 34
 
 # ─── LOGO ────────────────────────────────────────────────────────────────────
 
