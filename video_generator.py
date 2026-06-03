@@ -122,7 +122,7 @@ PEXELS_QUERIES = {
     'default':            ['san diego', 'california', 'luxury home', 'real estate'],
 }
 
-def _fetch_background(content_type):
+def _fetch_background(content_type, neighborhood=None):
     """Try Unsplash API, then Pexels free, then gradient."""
     bg_w = int(W * 1.12)
     bg_h = int(H * 1.12)
@@ -130,8 +130,12 @@ def _fetch_background(content_type):
     # 1. Try Unsplash API if key available
     if UNSPLASH_KEY:
         try:
-            queries = SD_QUERIES.get(content_type, ['san diego'])
-            query = random.choice(queries).replace(' ', '+')
+            # Use neighborhood name if available for better photo match
+            if neighborhood and neighborhood.lower() not in ('san diego', ''):
+                query = (neighborhood.lower() + ' san diego').replace(' ', '+')
+            else:
+                queries = SD_QUERIES.get(content_type, ['san diego'])
+                query = random.choice(queries).replace(' ', '+')
             url = f'https://api.unsplash.com/photos/random?query={query}&orientation=portrait&client_id={UNSPLASH_KEY}'
             req = urllib.request.Request(url, headers={'Accept-Version': 'v1'})
             with urllib.request.urlopen(req, timeout=6) as r:
@@ -262,6 +266,19 @@ def _txt(img, text, font, x, y, color, alpha, anchor='mm'):
     d.text((x,y), text, font=font, fill=(r,g,b,alpha), anchor=anchor)
     img.paste(layer, mask=layer)
 
+def _txt_backed(img, draw, text, font, x, y, color, alpha, anchor='mm', pad_x=20, pad_y=8):
+    """Draw text with a semi-transparent dark backing pill for readability."""
+    if alpha <= 0 or not text: return
+    bb = draw.textbbox((x,y), text, font=font, anchor=anchor)
+    bx1 = bb[0] - pad_x; by1 = bb[1] - pad_y
+    bx2 = bb[2] + pad_x; by2 = bb[3] + pad_y
+    back = Image.new('RGBA', (W,H), (0,0,0,0))
+    bd = ImageDraw.Draw(back)
+    bd.rounded_rectangle([(bx1,by1),(bx2,by2)], radius=6,
+                          fill=(0,0,0,int(alpha*0.55)))
+    img.paste(back, mask=back)
+    _txt(img, text, font, x, y, color, alpha, anchor)
+
 def _line(img, x1, y1, x2, y2, color, alpha, w=4):
     if alpha <= 0: return
     layer = Image.new('RGBA', (W,H), (0,0,0,0))
@@ -355,7 +372,7 @@ def _render(img, draw, post_data, f):
         hlines = _wrap(draw, hl, fh, W - PAD*2)
         y_cur = rule_y + 50
         for line in hlines[:3]:
-            _txt(img, line, fh, CENTER, y_cur+yo, WHITE, int(al*0.95))
+            _txt_backed(img, draw, line, fh, CENTER, y_cur+yo, WHITE, int(al*0.95))
             y_cur += 52
         hl_bottom = y_cur + yo
 
@@ -367,7 +384,7 @@ def _render(img, draw, post_data, f):
         blines = _wrap(draw, body[:180], fb, W - PAD*2 - 20)
         y_cur = hl_bottom + 30
         for line in blines[:3]:
-            _txt(img, line, fb, CENTER, y_cur+yo, CREAM, int(al*0.72))
+            _txt_backed(img, draw, line, fb, CENTER, y_cur+yo, CREAM, int(al*0.72))
             y_cur += 38
 
     # ── STAT ── auto-sized, locked to safe zone
@@ -464,7 +481,10 @@ def generate_reel(post_data: dict) -> str:
 
         # Background
         log.info('Fetching background...')
-        bg = _fetch_background(post_data.get('content_type','market_stat'))
+        bg = _fetch_background(
+            post_data.get('content_type','market_stat'),
+            post_data.get('neighborhood','')
+        )
 
         # Frames
         _build_frames(post_data, bg, logo, tmp)
