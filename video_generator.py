@@ -87,9 +87,11 @@ def _fetch_bg(content_type, neighborhood='', size_w=None, size_h=None):
     if UNSPLASH_KEY:
         try:
             if neighborhood and neighborhood.lower() not in ('san diego',''):
-                query = (neighborhood.lower() + ' san diego').replace(' ','+')
+                # Always append california to avoid ambiguous results (Carmel Valley = France otherwise)
+                query = (neighborhood.lower() + ' california neighborhood').replace(' ','+')
             else:
-                query = 'san+diego+real+estate'
+                queries = SD_QUERIES.get(content_type, ['san diego california coast'])
+                query = random.choice(queries).replace(' ','+')
             url = f'https://api.unsplash.com/photos/random?query={query}&orientation=portrait&client_id={UNSPLASH_KEY}'
             req = urllib.request.Request(url, headers={'Accept-Version':'v1'})
             with urllib.request.urlopen(req, timeout=6) as r:
