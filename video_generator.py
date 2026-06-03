@@ -67,16 +67,19 @@ def _font(name, size):
 # ─── BACKGROUND FETCH ────────────────────────────────────────────────────────
 
 PEXELS_BY_TYPE = {
-    'sd_hidden_gem':      ['2119714','1308940','2373488','3935333','1029599'],
+    # Dark cinematic types - moody SD/coastal/architectural shots
+    'sd_hidden_gem':      ['1642125','2119714','2559941','3849407','1174732','2422915','1308940'],
+    'current_event_tie':  ['2119714','2559941','1642125','3849407','2102587','1732414'],
+    'investor_quote':     ['2102587','1732414','3849407','2467285','1571460','1396122'],
+    'market_stat':        ['2102587','1732414','2119714','3849407','1642125','2559941'],
+    # Light editorial types - bright homes/interiors
     'sd_lifestyle_hook':  ['1642125','2559941','3849407','1174732','2422915'],
     'san_diego_lifestyle':['1642125','2559941','2422915','1174732','2119714'],
-    'market_stat':        ['2102587','1732414','2119714','3849407','1396122'],
     'hot_take':           ['1571460','2467285','1396122','259588','1029599'],
     'buyer_seller_tip':   ['1571460','2467285','3935333','1396122','323780'],
     'hyper_local_intel':  ['2119714','1308940','259588','323780','1396122'],
     'current_event_tie':  ['2119714','3849407','2102587','1732414','2559941'],
     'property_spotlight': ['1396122','259588','1029599','323780','2467285'],
-    'investor_quote':     ['2102587','1732414','3849407','1571460','2467285'],
 }
 
 def _fetch_bg(content_type, neighborhood='', size_w=None, size_h=None):
@@ -131,12 +134,21 @@ def _fetch_bg(content_type, neighborhood='', size_w=None, size_h=None):
     return _gradient(bw, bh)
 
 def _gradient(w, h):
-    bg = Image.new('RGB', (w, h))
+    # Rich cinematic gradient - deep charcoal with warm orange glow
+    bg = Image.new('RGBA', (w, h), (0,0,0,255))
     d  = ImageDraw.Draw(bg)
     for y in range(h):
         t = y/h
-        d.line([(0,y),(w,y)], fill=(int(15+t*10), int(12+t*8), int(18+t*14)))
-    return bg
+        r = int(20 + t*12)
+        g = int(16 + t*8)
+        b = int(25 + t*10)
+        d.line([(0,y),(w,y)], fill=(r,g,b,255))
+    glow = Image.new('RGBA', (w,h), (0,0,0,0))
+    gd = ImageDraw.Draw(glow)
+    for i in range(180, 0, -1):
+        alpha = min(int((180-i) * 0.7), 120)
+        gd.ellipse([(-i, h-i*2),(i*3, h+i)], fill=(180,60,10,alpha))
+    return Image.alpha_composite(bg, glow).convert('RGB')
 
 # ─── KEN BURNS ───────────────────────────────────────────────────────────────
 
@@ -157,15 +169,22 @@ def _ken_burns(bg, f, total):
 # ─── OVERLAYS ────────────────────────────────────────────────────────────────
 
 def _dark_overlay(bg_frame):
-    """Heavy cinematic dark overlay for dark style posts."""
+    """Very heavy dark overlay - photo gives atmosphere, text stays king."""
     ov = Image.new('RGBA', (W,H), (0,0,0,0))
     d  = ImageDraw.Draw(ov)
     for y in range(H):
         t = y/H
-        if t < 0.44:   a = int(200*(1-t/0.44)**1.6)
-        elif t > 0.60: a = int(230*((t-0.60)/0.40)**1.1)
-        else:          a = 20
-        d.line([(0,y),(W,y)], fill=(0,0,0,a))
+        if t < 0.50:
+            # Top half: very dark so text pops
+            a = int(230*(1-t/0.50)**1.2)
+            a = max(a, 160)
+        elif t > 0.55:
+            # Bottom half: even darker for logo zone
+            a = int(200 + int(55*((t-0.55)/0.45)))
+        else:
+            # Narrow window: slightly lighter to let photo breathe
+            a = 140
+        d.line([(0,y),(W,y)], fill=(0,0,0,min(a,245)))
     return Image.alpha_composite(bg_frame.convert('RGBA'), ov).convert('RGB')
 
 def _light_overlay(bg_frame):
@@ -310,7 +329,9 @@ def _render_dark(img, draw, post_data, f):
         hlines = _wrap(draw, hl, fh, W-PAD*2)
         y_cur = rule_y+50
         for line in hlines[:3]:
-            _paste_backed(img, draw, line, fh, CX, y_cur+yo, WHITE, int(al*0.95))
+            # Soft shadow instead of boxy pill
+            _paste(img, line, fh, CX+2, y_cur+yo+2, BLACK, int(al*0.5))
+            _paste(img, line, fh, CX, y_cur+yo, WHITE, int(al*0.97))
             y_cur += 50
         hl_bottom = y_cur+yo
 
@@ -323,7 +344,8 @@ def _render_dark(img, draw, post_data, f):
         blines = _wrap(draw, body_short, fb, W-PAD*2)
         y_cur = hl_bottom+36
         for line in blines[:2]:
-            _paste_backed(img, draw, line, fb, CX, y_cur+yo, WHITE, int(al*0.88), pad_x=20, pad_y=8)
+            _paste(img, line, fb, CX+1, y_cur+yo+1, BLACK, int(al*0.45))
+            _paste(img, line, fb, CX, y_cur+yo, CREAM, int(al*0.85))
             y_cur += 38
         body_bottom = y_cur+yo
 
@@ -442,7 +464,7 @@ def _render_logo(img, f, is_light=False):
             try: logo = Image.open(p).convert('RGBA'); break
             except: continue
     if not logo: return
-    lw = 160; lh = int(lw*logo.height/logo.width)
+    lw = 200; lh = int(lw*logo.height/logo.width)
     lr = logo.resize((lw,lh), Image.LANCZOS)
     if al < 255:
         r,g,b,a2 = lr.split()
