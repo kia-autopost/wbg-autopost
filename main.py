@@ -23,72 +23,55 @@ CLD_KEY       = os.getenv('CLOUDINARY_API_KEY', '')
 CLD_SECRET    = os.getenv('CLOUDINARY_API_SECRET', '')
 
 app = Flask(__name__)
-_post_index = [0]
+
+# Lock prevents two posts running simultaneously (avoids caption/video mismatch)
+_post_lock = threading.Lock()
 
 def run_post(slot='morning'):
-    log.info(f'--- Starting {slot} post ---')
+    # If another post is already generating, skip
+    if not _post_lock.acquire(blocking=False):
+        log.warning(f'Post skipped — another post is already in progress')
+        return False, 'locked'
+
     try:
         import random as _r
-        ct = _r.choice(CONTENT_TYPES)
-        _post_index[0] += 1
+        log.info(f'--- Starting {slot} post ---')
+        ct        = _r.choice(CONTENT_TYPES)
         post_data = generate_post(ct, ANTHROPIC_KEY)
-        log.info(f'Content type: {ct}')
+        log.info(f'Content: {ct} | {post_data.get("neighborhood","")}')
+
         video_url = generate_reel(post_data)
         log.info(f'Video ready: {video_url}')
+
         result = post_reel_to_instagram(
             video_url, post_data['caption'],
             IG_USER_ID, IG_TOKEN, CLD_CLOUD, CLD_KEY, CLD_SECRET
         )
         log.info(f'Posted to Instagram! ID: {result}')
         return True, result
+
     except Exception as e:
         log.error(f'Post failed: {e}')
         log.error(traceback.format_exc())
         return False, str(e)
 
+    finally:
+        _post_lock.release()
+
 @app.route('/test', methods=['GET', 'POST'])
 def test_post():
+    if _post_lock.locked():
+        return jsonify({'status': 'busy', 'message': 'A post is already generating. Try again in a few minutes.'}), 429
     log.info('Manual test triggered via /test')
-    t = threading.Thread(target=run_post, kwargs={'slot': 'morning'}, daemon=True)
+    t = threading.Thread(target=run_post, kwargs={'slot': 'test'}, daemon=True)
     t.start()
-    return jsonify({
-        'status': 'started',
-        'message': 'Post generating in background. Check logs and Instagram in ~2 min!'
-    }), 200
-
-@app.route('/debug', methods=['GET', 'POST'])
-def debug_post():
-    log.info('Debug test triggered — running synchronously')
-    try:
-        ct = CONTENT_TYPES[0]
-        log.info(f'Step 1: Generating content for type: {ct}')
-        post_data = generate_post(ct, ANTHROPIC_KEY)
-        log.info(f'✅ Content generated: {post_data}')
-
-        log.info('Step 2: Generating reel...')
-        video_url = generate_reel(post_data)
-        log.info(f'✅ Video ready: {video_url}')
-
-        log.info('Step 3: Posting to Instagram...')
-        result = post_reel_to_instagram(
-            video_url, post_data['caption'],
-            IG_USER_ID, IG_TOKEN, CLD_CLOUD, CLD_KEY, CLD_SECRET
-        )
-        log.info(f'✅ Posted! ID: {result}')
-        return jsonify({'status': 'success', 'instagram_id': result}), 200
-
-    except Exception as e:
-        return jsonify({
-            'status':       'error',
-            'step_failed':  type(e).__name__,
-            'error':        str(e),
-            'traceback':    traceback.format_exc()
-        }), 500
+    return jsonify({'status': 'started', 'message': 'Generating — check Instagram in ~4 min!'}), 200
 
 @app.route('/health')
 def health():
     return jsonify({
         'status':   'running',
+        'busy':     _post_lock.locked(),
         'timezone': TZ,
         'morning':  TIME_MORNING,
         'evening':  TIME_EVENING
