@@ -310,24 +310,26 @@ def _render_dark(img, draw, post_data, f):
             y_cur += 50
         hl_bottom = y_cur+yo
 
-    # Body
+    # Body - max 2 lines, truncated to fit cleanly
     al = _a(f,T['body'],22); yo = _y(f,T['body'],22); body_bottom = hl_bottom+30
     if al and body:
-        fb = _font('oswald_regular',28)
-        blines = _wrap(draw, body[:200], fb, W-PAD*2)
-        y_cur = hl_bottom+38
-        for line in blines[:3]:
+        fb = _font('oswald_regular',26)
+        # Truncate body to ~120 chars so it fits in 2 lines cleanly
+        body_short = body[:120].rsplit(' ',1)[0] if len(body) > 120 else body
+        blines = _wrap(draw, body_short, fb, W-PAD*2)
+        y_cur = hl_bottom+36
+        for line in blines[:2]:
             _paste_backed(img, draw, line, fb, CX, y_cur+yo, WHITE, int(al*0.88), pad_x=20, pad_y=8)
-            y_cur += 40
+            y_cur += 38
         body_bottom = y_cur+yo
 
-    # Stat
+    # Stat - flows right after body
     al = _a(f,T['stat'],20); yo = _y(f,T['stat'],20)
     if al and stat:
-        for sz in [80,66,54,44]:
+        for sz in [72,58,46,38]:
             fs = _font('oswald_bold',sz)
             if draw.textbbox((0,0),stat,font=fs)[2] <= W-PAD*2: break
-        stat_y = min(body_bottom+45, H-290)
+        stat_y = min(body_bottom+36, H-290)
         _paste(img, stat, fs, CX, stat_y+yo, ORANGE, al)
 
 # ─── LIGHT EDITORIAL RENDERER ────────────────────────────────────────────────
@@ -400,9 +402,10 @@ def _render_light(img, draw, post_data, f):
     al = _a(f,T['body'],20); yo = _y(f,T['body'],20); body_bottom = hl_bottom+20
     if al and body:
         fb = _font('raleway',24)
-        blines = _wrap(draw, body[:200], fb, W-PAD*2-10)
+        body_short = body[:120].rsplit(' ',1)[0] if len(body) > 120 else body
+        blines = _wrap(draw, body_short, fb, W-PAD*2-10)
         y_cur = hl_bottom+28
-        for line in blines[:3]:
+        for line in blines[:2]:
             _paste(img, line, fb, CX, y_cur+yo, DKGRAY, int(al*0.78))
             y_cur += 34
         body_bottom = y_cur+yo
