@@ -15,7 +15,7 @@ log = logging.getLogger('WBG')
 ASSETS_DIR     = os.path.join(os.path.dirname(__file__), 'assets')
 HEADSHOT_PATH  = os.path.join(ASSETS_DIR, 'headshot.png')
 PREFERRED_LOGO = 'Logo_Primary_White_01.png'
-DARK_LOGO      = 'exp_Logo_Primary_Dune_01.png'  # for light backgrounds
+DARK_LOGO      = 'Logomark_Primary_Dune_01 (1).png'  # WB mark in Dune for light backgrounds
 FALLBACK_LOGOS = ['exp_Logo_Secondary_White_01.png', 'WBG LOGO - ExpLogoLogoPrimaryWhite01.png']
 
 W, H         = 720, 1280
@@ -339,13 +339,7 @@ def _render_dark(img, draw, post_data, f):
 # ─── LIGHT EDITORIAL RENDERER ────────────────────────────────────────────────
 
 def _render_light(img, draw, post_data, f):
-    """
-    Light editorial layout:
-    - Small label top left on photo
-    - Neighborhood name HUGE, dark, in the cream panel
-    - Thin orange rule
-    - Headline and body in black on cream
-    """
+    """Light editorial: photo top 52%, cream panel bottom 48%."""
     ct   = post_data.get('content_type','buyer_seller_tip')
     hood = post_data.get('neighborhood','San Diego').upper()
     hl   = post_data.get('headline', post_data.get('insight',''))
@@ -364,65 +358,72 @@ def _render_light(img, draw, post_data, f):
     label = labels.get(ct,'SAN DIEGO')
 
     PAD = 45; CX = W//2
-    PANEL_TOP = int(H * 0.55)  # where cream panel starts
+    PANEL_TOP = int(H * 0.52)
 
     T = {'label':int(FPS*0.4), 'hood':int(FPS*0.85), 'rule':int(FPS*1.4),
-         'hl':int(FPS*1.7), 'body':int(FPS*2.5), 'stat':int(FPS*3.2)}
+         'hl':int(FPS*1.8), 'body':int(FPS*2.6), 'stat':int(FPS*3.3)}
 
-    # Label - top of photo, white
+    # Label - top of photo, white, more visible
     al = _a(f,T['label'],18); yo = _y(f,T['label'],18)
-    _paste(img, label, _font('raleway',22), CX, 90+yo, WHITE, int(al*0.85))
+    _paste(img, label, _font('oswald_regular',26), CX, 95+yo, WHITE, int(al*0.90))
 
     # Neighborhood - MASSIVE black in cream panel
     al = _a(f,T['hood'],22); yo = _y(f,T['hood'],22)
-    hood_bottom = PANEL_TOP + 80
+    hood_bottom = PANEL_TOP + 90
     if al:
-        for sz in [110,92,76,62,50]:
+        for sz in [100,84,70,58,48]:
             fn = _font('oswald_bold',sz)
             nlines = _wrap(draw, hood, fn, W-PAD*2)
             if len(nlines) <= 2: break
-        y_cur = PANEL_TOP + 55
+        y_cur = PANEL_TOP + 52
         for line in nlines[:2]:
             _paste(img, line, fn, CX, y_cur+yo, BLACK, al)
-            y_cur += sz+6
-        hood_bottom = y_cur+yo
+            y_cur += sz+8
+        hood_bottom = y_cur + yo + 5
 
     # Orange rule
-    al = _a(f,T['rule'],10); rule_y = hood_bottom+18
+    al = _a(f,T['rule'],10); rule_y = hood_bottom + 16
     _paste_line(img, CX-35, rule_y, CX+35, rule_y, ORANGE, al, w=3)
 
-    # Headline - black oswald
-    al = _a(f,T['hl'],18); yo = _y(f,T['hl'],20); hl_bottom = rule_y+35
+    # Headline - black oswald, fits 1-2 lines
+    al = _a(f,T['hl'],18); yo = _y(f,T['hl'],20)
+    hl_bottom = rule_y + 42
     if al and hl:
-        fh = _font('oswald_regular',36)
-        hlines = _wrap(draw, hl, fh, W-PAD*2)
-        y_cur = rule_y+38
+        for fsz in [34,28,24]:
+            fh = _font('oswald_regular', fsz)
+            hlines = _wrap(draw, hl, fh, W-PAD*2)
+            if len(hlines) <= 2: break
+        y_cur = rule_y + 42
         for line in hlines[:2]:
             _paste(img, line, fh, CX, y_cur+yo, DKGRAY, int(al*0.95))
-            y_cur += 46
-        hl_bottom = y_cur+yo
+            y_cur += fsz + 10
+        hl_bottom = y_cur + yo
 
-    # Body - raleway, dark gray
-    al = _a(f,T['body'],20); yo = _y(f,T['body'],20); body_bottom = hl_bottom+20
-    if al and body:
-        fb = _font('raleway',24)
-        body_short = body[:120].rsplit(' ',1)[0] if len(body) > 120 else body
-        blines = _wrap(draw, body_short, fb, W-PAD*2-10)
-        y_cur = hl_bottom+28
-        for line in blines[:2]:
-            _paste(img, line, fb, CX, y_cur+yo, DKGRAY, int(al*0.78))
-            y_cur += 34
-        body_bottom = y_cur+yo
-
-    # Stat - orange, oswald bold, hard truncated
+    # Stat - right after headline, before body
     al = _a(f,T['stat'],18); yo = _y(f,T['stat'],18)
+    stat_bottom = hl_bottom
     if al and stat:
-        stat_short = stat[:25].rsplit(' ',1)[0] if len(stat) > 25 else stat
-        for sz in [70,58,46,38,30]:
-            fs = _font('oswald_bold',sz)
+        stat_short = stat[:20].rsplit(' ',1)[0] if len(stat) > 20 else stat
+        for ssz in [58,46,38,30]:
+            fs = _font('oswald_bold', ssz)
             if draw.textbbox((0,0),stat_short,font=fs)[2] <= W-PAD*2: break
-        stat_y = min(body_bottom+38, H-270)
+        stat_y = hl_bottom + 20
+        # Cap so stat doesn't go into logo zone
+        stat_y = min(stat_y, H-320)
         _paste(img, stat_short, fs, CX, stat_y+yo, ORANGE, al)
+        stat_bottom = stat_y + ssz + yo + 10
+
+    # Body - raleway small, after stat
+    al = _a(f,T['body'],20); yo = _y(f,T['body'],20)
+    if al and body:
+        fb = _font('raleway', 22)
+        body_short = body[:100].rsplit(' ',1)[0] if len(body) > 100 else body
+        blines = _wrap(draw, body_short, fb, W-PAD*2)
+        y_cur = stat_bottom + 16
+        for line in blines[:2]:
+            if y_cur + yo < H - 280:  # never overlap logo
+                _paste(img, line, fb, CX, y_cur+yo, LTGRAY, int(al*0.80))
+                y_cur += 30
 
 # ─── LOGO ────────────────────────────────────────────────────────────────────
 
@@ -452,13 +453,14 @@ def _render_headshot(img, f):
     if al <= 0: return
     try:
         hs = Image.open(HEADSHOT_PATH).convert('RGBA')
-        hw = 100; hh = int(hw*hs.height/hs.width)
+        hw = 90; hh = int(hw*hs.height/hs.width)
         hs = hs.resize((hw,hh), Image.LANCZOS)
         if al < 255:
             r,g,b,a2 = hs.split()
             a2 = a2.point(lambda x: int(x*al/255))
             hs = Image.merge('RGBA',(r,g,b,a2))
-        img.paste(hs, (W-hw-20, H-hh-160), hs)
+        # Position in cream panel bottom right, above logo
+        img.paste(hs, (W-hw-25, H-hh-185), hs)
     except: pass
 
 # ─── FRAME BUILDER ───────────────────────────────────────────────────────────
