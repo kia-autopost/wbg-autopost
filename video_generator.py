@@ -82,55 +82,39 @@ PEXELS_BY_TYPE = {
     'property_spotlight': ['1396122','259588','1029599','323780','2467285'],
 }
 
+# Photo pools by style - local files in assets folder
+DARK_PHOTOS  = ['sunset_1.jpg', 'sunset_beach.jpg', 'aerial_city_1.jpg',
+                'neighborhood_1.jpg', 'craftsman_1.jpg', 'palm_street_1.jpg']
+LIGHT_PHOTOS = ['luxury_home_1.jpg', 'luxury_home_2.jpg', 'luxury_home_3.jpg',
+                'modern_house_1.jpg', 'modern_house_2.jpg', 'pool_home_1.jpg',
+                'modern_interior_1.jpg', 'modern_interior_2.jpg']
+ALL_PHOTOS   = DARK_PHOTOS + LIGHT_PHOTOS
+
 def _fetch_bg(content_type, neighborhood='', size_w=None, size_h=None):
     bw = size_w or int(W * 1.12)
     bh = size_h or int(H * 1.12)
 
-    # Try Unsplash API
-    if UNSPLASH_KEY:
+    # Pick from local curated photo library
+    is_dark = content_type in DARK_TYPES
+    pool = DARK_PHOTOS if is_dark else LIGHT_PHOTOS
+
+    # Filter to photos that actually exist
+    available = [p for p in pool if os.path.exists(os.path.join(ASSETS_DIR, p))]
+    if not available:
+        available = [p for p in ALL_PHOTOS if os.path.exists(os.path.join(ASSETS_DIR, p))]
+
+    if available:
+        chosen = random.choice(available)
         try:
-            if neighborhood and neighborhood.lower() not in ('san diego',''):
-                # Anchor to real estate/residential to avoid nature/ocean shots
-                suffixes = ['california real estate', 'california homes', 'california residential street', 'san diego neighborhood']
-                suffix = random.choice(suffixes)
-                query = (neighborhood.lower() + ' ' + suffix).replace(' ','+')
-            else:
-                queries = SD_QUERIES.get(content_type, ['san diego real estate'])
-                query = random.choice(queries).replace(' ','+')
-            url = f'https://api.unsplash.com/photos/random?query={query}&orientation=portrait&client_id={UNSPLASH_KEY}'
-            req = urllib.request.Request(url, headers={'Accept-Version':'v1'})
-            with urllib.request.urlopen(req, timeout=6) as r:
-                data = json.loads(r.read())
-            with urllib.request.urlopen(data['urls']['regular'], timeout=10) as r:
-                img_data = r.read()
-            tmp = tempfile.mktemp(suffix='.jpg')
-            open(tmp,'wb').write(img_data)
-            bg = Image.open(tmp).convert('RGB'); os.unlink(tmp)
+            bg = Image.open(os.path.join(ASSETS_DIR, chosen)).convert('RGB')
             ratio = max(bw/bg.width, bh/bg.height)
             bg = bg.resize((int(bg.width*ratio), int(bg.height*ratio)), Image.LANCZOS)
-            log.info('Unsplash bg loaded')
+            log.info(f'Local photo: {chosen}')
             return bg
         except Exception as e:
-            log.warning(f'Unsplash failed: {e}')
+            log.warning(f'Local photo failed: {e}')
 
-    # Try Pexels
-    try:
-        ids = PEXELS_BY_TYPE.get(content_type, ['2119714','1396122','1642125'])
-        pid = random.choice(ids)
-        url = f'https://images.pexels.com/photos/{pid}/pexels-photo-{pid}.jpeg?auto=compress&cs=tinysrgb&w={bw}&h={bh}&fit=crop'
-        req = urllib.request.Request(url, headers={'User-Agent':'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            img_data = r.read()
-        tmp = tempfile.mktemp(suffix='.jpg')
-        open(tmp,'wb').write(img_data)
-        bg = Image.open(tmp).convert('RGB'); os.unlink(tmp)
-        ratio = max(bw/bg.width, bh/bg.height)
-        if ratio > 1: bg = bg.resize((int(bg.width*ratio), int(bg.height*ratio)), Image.LANCZOS)
-        log.info(f'Pexels bg loaded: {bg.size}')
-        return bg
-    except Exception as e:
-        log.warning(f'Pexels failed: {e}')
-
+    log.warning('No photos available, using gradient')
     return _gradient(bw, bh)
 
 def _gradient(w, h):
