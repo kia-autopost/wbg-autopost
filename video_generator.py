@@ -38,7 +38,7 @@ LIGHT_TYPES = {'buyer_seller_tip', 'hot_take', 'hyper_local_intel', 'sd_lifestyl
                'san_diego_lifestyle', 'property_spotlight'}
 HEADSHOT_TYPES = {'buyer_seller_tip', 'hot_take'}
 
-UNSPLASH_KEY = os.getenv('UNSPLASH_ACCESS_KEY', '')
+UNSPLASH_KEY = os.getenv('UNSPLASH_ACCESS_KEY', 'gWh-_occEjfxnSZSyxlrqYJYB3indaIXCp3STJyGesc')
 
 # ─── FONTS ───────────────────────────────────────────────────────────────────
 
