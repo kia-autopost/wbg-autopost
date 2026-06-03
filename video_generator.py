@@ -640,9 +640,11 @@ def _render_home_tour(img, draw, post_data, f):
         feat_y = rule_y + 80
         for feat in [feat1, feat2, feat3]:
             if feat and feat_y+yo < H-250:
-                # Small orange dot accent
-                _paste(img, '▸', _font('oswald_regular',20), CX-130, feat_y+yo, ORANGE, int(al*0.9))
-                _paste(img, feat, ff, CX+10, feat_y+yo, DKGRAY, int(al*0.78), anchor='lm')
+                # Truncate feature to fit in panel
+                feat_short = feat[:32].rsplit(' ',1)[0] if len(feat) > 32 else feat
+                feat_lines = _wrap(draw, feat_short, ff, W-PAD*2-30)
+                _paste(img, '▸', _font('oswald_regular',20), PAD+5, feat_y+yo, ORANGE, int(al*0.9))
+                _paste(img, feat_lines[0] if feat_lines else feat_short, ff, PAD+25, feat_y+yo, DKGRAY, int(al*0.78), anchor='lm')
                 feat_y += 38
 
     # Stat
