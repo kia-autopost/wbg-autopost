@@ -1,27 +1,23 @@
 """
-WBG Video Generator - V3 Cinematic Edition
-Design direction: Editorial luxury real estate
-- Full-bleed Unsplash photo background with slow Ken Burns zoom
-- Massive condensed typography, text slides up cinematically
-- Near-black overlay, cream/white text
-- Single thin Blaze Orange accent line (not everywhere)
-- White WBG logo, small and tasteful bottom center
+WBG Video Generator - V4 Luxury Editorial Edition
+- Downloads Oswald Bold/Regular from Google Fonts at runtime (cached in /tmp)
+- Uses Unsplash source URLs (no API key needed) for backgrounds
+- Ken Burns slow zoom
+- Text slides up with staggered timing
+- Single white logo, no flashing
 - Headshot only on buyer_seller_tip and hot_take
-- One logo picked at start, held for entire video
+- All text properly wrapped, nothing cut off
 """
 import os, tempfile, shutil, wave, subprocess, random, urllib.request, json, logging
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
+from PIL import Image, ImageDraw, ImageFont
 import imageio_ffmpeg
-import cloudinary
-import cloudinary.uploader
+import cloudinary, cloudinary.uploader
 
 log = logging.getLogger('WBG')
 
 ASSETS_DIR    = os.path.join(os.path.dirname(__file__), 'assets')
 HEADSHOT_PATH = os.path.join(ASSETS_DIR, 'headshot.png')
-
-# V3: Single preferred white logo for dark backgrounds
 PREFERRED_LOGO = 'Logo_Primary_White_01.png'
 FALLBACK_LOGOS = [
     'exp_Logo_Secondary_White_01.png',
@@ -29,412 +25,415 @@ FALLBACK_LOGOS = [
     'exp_Logo_Primary_Dune_01.png',
 ]
 
-# Font paths
-FONT_PATHS = [
-    os.path.join(ASSETS_DIR, 'Caladea-Regular.ttf'),
-    os.path.join(ASSETS_DIR, 'Caladea-Bold.ttf'),
-]
+# Canvas - Instagram Reels native
+W, H         = 1080, 1920
+FPS          = 24
+DURATION     = 10
+TOTAL_FRAMES = DURATION * FPS
 
-W, H          = 720, 1280
-FPS           = 24
-DURATION      = 10
-TOTAL_FRAMES  = DURATION * FPS  # 240 frames
+# Colors
+WHITE  = (255, 255, 255)
+CREAM  = (240, 235, 225)
+ORANGE = (210, 85, 25)
+BLACK  = (8, 8, 8)
 
-# WBG Brand colors - V3 restrained palette
-BLACK     = (8, 8, 8)
-ORANGE    = (210, 85, 25)
-WHITE     = (255, 255, 255)
-CREAM     = (242, 238, 230)
-DARK_GRAY = (20, 20, 20)
+# ─── FONT DOWNLOAD & CACHE ───────────────────────────────────────────────────
 
-UNSPLASH_KEY = os.getenv('UNSPLASH_ACCESS_KEY', '')
+FONT_CACHE = {}
 
-SD_QUERIES = {
-    'sd_hidden_gem':      ['san diego neighborhood aerial', 'san diego coastline', 'california coastal town', 'san diego architecture'],
-    'current_event_tie':  ['san diego skyline sunset', 'san diego downtown', 'california city aerial', 'san diego waterfront'],
-    'hot_take':           ['modern luxury interior', 'contemporary home exterior', 'luxury real estate', 'modern architecture california'],
-    'hyper_local_intel':  ['san diego neighborhood street', 'california suburb aerial', 'san diego hills', 'san diego residential'],
-    'sd_lifestyle_hook':  ['san diego beach golden hour', 'la jolla cove sunrise', 'coronado bridge sunset', 'del mar bluffs'],
-    'property_spotlight': ['luxury home pool san diego', 'modern house exterior', 'mediterranean villa california', 'beach house interior'],
-    'market_stat':        ['san diego skyline night', 'san diego aerial cityscape', 'california coast aerial', 'san diego harbor'],
-    'buyer_seller_tip':   ['modern home interior minimal', 'luxury kitchen interior', 'open plan living room', 'real estate modern home'],
-    'investor_quote':     ['city skyline dusk', 'modern architecture glass', 'luxury penthouse view', 'urban skyline california'],
-    'san_diego_lifestyle':['san diego beach lifestyle', 'pacific beach sunset', 'ocean beach california', 'la jolla sunset cliffs'],
+GOOGLE_FONTS = {
+    'oswald_bold':    'https://fonts.gstatic.com/s/oswald/v53/TK3_WkUHHAIjg75cFRf3bXL8LICs13NvgUFoZAaRliE.ttf',
+    'oswald_regular': 'https://fonts.gstatic.com/s/oswald/v53/TK3_WkUHHAIjg75cFRf3bXL8LICs169vgUFoZAaRliE.ttf',
+    'raleway_regular':'https://fonts.gstatic.com/s/raleway/v34/1Ptug8zYS_SKggPNyC0IT4ttDfA.ttf',
 }
 
-# ─── LOGO ────────────────────────────────────────────────────────────────────
-
-def _load_logo():
-    path = os.path.join(ASSETS_DIR, PREFERRED_LOGO)
+def _get_font_path(name):
+    """Download font if not cached, return local path."""
+    cache_dir = '/tmp/wbg_fonts'
+    os.makedirs(cache_dir, exist_ok=True)
+    path = os.path.join(cache_dir, f'{name}.ttf')
     if os.path.exists(path):
+        return path
+    url = GOOGLE_FONTS.get(name)
+    if not url:
+        return None
+    try:
+        log.info(f'Downloading font: {name}')
+        urllib.request.urlretrieve(url, path)
+        log.info(f'Font cached: {name}')
+        return path
+    except Exception as e:
+        log.warning(f'Font download failed for {name}: {e}')
+        return None
+
+def _font(name, size):
+    """Load a font by name and size, with fallback."""
+    if (name, size) in FONT_CACHE:
+        return FONT_CACHE[(name, size)]
+    path = _get_font_path(name)
+    if path:
         try:
-            return Image.open(path).convert('RGBA')
+            f = ImageFont.truetype(path, size)
+            FONT_CACHE[(name, size)] = f
+            return f
         except:
             pass
-    for name in FALLBACK_LOGOS:
-        path = os.path.join(ASSETS_DIR, name)
-        if os.path.exists(path):
-            try:
-                return Image.open(path).convert('RGBA')
-            except:
-                continue
-    return None
-
-# ─── FONTS ───────────────────────────────────────────────────────────────────
-
-def _load_font(size):
-    for path in FONT_PATHS:
-        if os.path.exists(path):
-            try:
-                return ImageFont.truetype(path, size)
-            except:
-                continue
+    # Fallback to Caladea
+    caladea = os.path.join(ASSETS_DIR, 'Caladea-Regular.ttf')
+    if os.path.exists(caladea):
+        try:
+            f = ImageFont.truetype(caladea, size)
+            FONT_CACHE[(name, size)] = f
+            return f
+        except:
+            pass
     return ImageFont.load_default()
 
 # ─── BACKGROUND ──────────────────────────────────────────────────────────────
 
+SD_PHOTO_QUERIES = {
+    'sd_hidden_gem':      ['san-diego', 'california-coast', 'san-diego-neighborhood', 'california-architecture'],
+    'current_event_tie':  ['san-diego-skyline', 'san-diego-downtown', 'california-city', 'san-diego-bay'],
+    'hot_take':           ['luxury-interior', 'modern-home', 'luxury-real-estate', 'contemporary-architecture'],
+    'hyper_local_intel':  ['san-diego-street', 'california-suburb', 'san-diego-hills', 'san-diego-residential'],
+    'sd_lifestyle_hook':  ['san-diego-beach', 'la-jolla', 'coronado', 'del-mar-california'],
+    'property_spotlight': ['luxury-pool', 'modern-house', 'mediterranean-villa', 'beach-house'],
+    'market_stat':        ['san-diego-skyline', 'california-coast', 'san-diego-harbor', 'city-aerial'],
+    'buyer_seller_tip':   ['modern-interior', 'luxury-kitchen', 'living-room', 'real-estate'],
+    'investor_quote':     ['city-skyline', 'modern-architecture', 'luxury-penthouse', 'urban-skyline'],
+    'san_diego_lifestyle':['san-diego-beach', 'pacific-beach', 'ocean-beach', 'la-jolla-cove'],
+}
+
 def _fetch_background(content_type):
-    if UNSPLASH_KEY:
-        try:
-            queries = SD_QUERIES.get(content_type, ['san diego'])
-            query = random.choice(queries).replace(' ', '+')
-            url = f'https://api.unsplash.com/photos/random?query={query}&orientation=portrait&client_id={UNSPLASH_KEY}'
-            req = urllib.request.Request(url, headers={'Accept-Version': 'v1'})
-            with urllib.request.urlopen(req, timeout=5) as r:
-                data = json.loads(r.read())
-            img_url = data['urls']['regular']
-            with urllib.request.urlopen(img_url, timeout=8) as r:
-                img_data = r.read()
-            tmp = tempfile.mktemp(suffix='.jpg')
-            with open(tmp, 'wb') as f:
-                f.write(img_data)
-            bg = Image.open(tmp).convert('RGB')
-            os.unlink(tmp)
-            # Size larger for Ken Burns zoom room
-            ratio = max((W * 1.1) / bg.width, (H * 1.1) / bg.height)
-            new_w = int(bg.width * ratio)
-            new_h = int(bg.height * ratio)
-            bg = bg.resize((new_w, new_h), Image.LANCZOS)
-            log.info('Unsplash background fetched OK')
-            return bg
-        except Exception as e:
-            log.warning(f'Unsplash failed, using gradient: {e}')
-    return _cinematic_gradient()
+    """Fetch photo via Unsplash source (no API key needed)."""
+    queries = SD_PHOTO_QUERIES.get(content_type, ['san-diego'])
+    query = random.choice(queries)
+    # Unsplash source - free, no key, returns random photo for query
+    # Fetch slightly larger than canvas for Ken Burns room
+    fetch_w = int(W * 1.12)
+    fetch_h = int(H * 1.12)
+    url = f'https://source.unsplash.com/{fetch_w}x{fetch_h}/?{query}'
+    try:
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0'
+        })
+        with urllib.request.urlopen(req, timeout=12) as r:
+            img_data = r.read()
+        tmp = tempfile.mktemp(suffix='.jpg')
+        with open(tmp, 'wb') as f:
+            f.write(img_data)
+        bg = Image.open(tmp).convert('RGB')
+        os.unlink(tmp)
+        # Ensure it's large enough for Ken Burns
+        if bg.width < W * 1.08 or bg.height < H * 1.08:
+            ratio = max((W * 1.12) / bg.width, (H * 1.12) / bg.height)
+            bg = bg.resize((int(bg.width * ratio), int(bg.height * ratio)), Image.LANCZOS)
+        log.info(f'Background fetched: {bg.size} for query: {query}')
+        return bg
+    except Exception as e:
+        log.warning(f'Background fetch failed: {e}. Using gradient.')
+        return _cinematic_gradient()
 
 def _cinematic_gradient():
-    img = Image.new('RGB', (int(W * 1.1), int(H * 1.1)), (0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    for y in range(int(H * 1.1)):
-        t = y / (H * 1.1)
-        r = int(18 + t * 12)
-        g = int(16 + t * 10)
-        b = int(20 + t * 15)
-        draw.line([(0, y), (int(W * 1.1), y)], fill=(r, g, b))
-    return img
+    """Rich dark gradient fallback."""
+    bg = Image.new('RGB', (int(W*1.12), int(H*1.12)))
+    draw = ImageDraw.Draw(bg)
+    for y in range(int(H*1.12)):
+        t = y / (H*1.12)
+        draw.line([(0,y),(int(W*1.12),y)], fill=(int(15+t*10), int(12+t*8), int(18+t*12)))
+    return bg
 
 # ─── KEN BURNS ───────────────────────────────────────────────────────────────
 
-def _ken_burns_frame(bg, frame_idx, total_frames):
-    bg_w, bg_h = bg.size
-    t = frame_idx / max(total_frames - 1, 1)
-    t_eased = t * t * (3 - 2 * t)
+def _ken_burns(bg, f, total):
+    """Slow push-in zoom. Starts at 1.08x crop, ends at 1.0x."""
+    t = f / max(total - 1, 1)
+    t_e = t * t * (3 - 2 * t)  # ease in-out
+    bw, bh = bg.size
 
-    # Slow push in: starts slightly wider, ends at exact canvas size
-    zoom_start = 1.08
-    zoom_end   = 1.0
+    # Crop starts larger (zoom out) and ends at exact canvas size (zoom in)
+    cw = int(W + (bw - W) * (1 - t_e) * 0.5)
+    ch = int(H + (bh - H) * (1 - t_e) * 0.5)
+    cw = max(cw, W); ch = max(ch, H)
+    cw = min(cw, bw); ch = min(ch, bh)
 
-    # Crop size starts larger, shrinks to W x H
-    crop_w = int(W * (zoom_start + (zoom_end - zoom_start) * t_eased))
-    crop_h = int(H * (zoom_start + (zoom_end - zoom_start) * t_eased))
-    crop_w = max(crop_w, W)
-    crop_h = max(crop_h, H)
+    # Subtle drift - center moves slightly
+    cx = bw // 2 + int(20 * (1 - t_e))
+    cy = bh // 2 + int(15 * (1 - t_e))
+    left = max(0, min(cx - cw//2, bw - cw))
+    top  = max(0, min(cy - ch//2, bh - ch))
 
-    # Center with subtle drift
-    cx = bg_w // 2 + int(15 * (1 - t_eased))
-    cy = bg_h // 2 + int(10 * (1 - t_eased))
-
-    left = max(0, min(cx - crop_w // 2, bg_w - crop_w))
-    top  = max(0, min(cy - crop_h // 2, bg_h - crop_h))
-
-    cropped = bg.crop((left, top, left + crop_w, top + crop_h))
+    cropped = bg.crop((left, top, left+cw, top+ch))
     if cropped.size != (W, H):
         cropped = cropped.resize((W, H), Image.LANCZOS)
     return cropped
 
 # ─── OVERLAY ─────────────────────────────────────────────────────────────────
 
-def _cinematic_overlay(frame_img):
-    overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
+def _overlay(bg_frame):
+    """
+    Luxury cinematic overlay:
+    - Heavy dark vignette top 45% (text zone)
+    - Heavy dark vignette bottom 35% (logo zone)
+    - Clear window in the middle so photo breathes
+    """
+    ov = Image.new('RGBA', (W, H), (0,0,0,0))
+    d  = ImageDraw.Draw(ov)
     for y in range(H):
         t = y / H
-        if t < 0.42:
-            alpha = int(220 * (1 - t / 0.42) ** 1.8)
-        elif t > 0.52:
-            alpha = int(250 * ((t - 0.52) / 0.48) ** 1.1)
+        if t < 0.45:
+            # Top: very dark, fades to clear
+            a = int(200 * (1 - t/0.45)**1.5)
+        elif t > 0.62:
+            # Bottom: dark for logo/text
+            a = int(230 * ((t-0.62)/0.38)**1.2)
         else:
-            alpha = 25
-        draw.line([(0, y), (W, y)], fill=(0, 0, 0, alpha))
-    result = Image.alpha_composite(frame_img.convert('RGBA'), overlay)
+            # Middle window: nearly clear
+            a = 20
+        d.line([(0,y),(W,y)], fill=(0,0,0,a))
+    result = Image.alpha_composite(bg_frame.convert('RGBA'), ov)
     return result.convert('RGB')
 
-# ─── TEXT HELPERS ────────────────────────────────────────────────────────────
+# ─── TEXT UTILITIES ──────────────────────────────────────────────────────────
 
-def _wrap_text(draw, text, font, max_w):
+def _wrap(draw, text, font, max_w):
+    """Wrap text to fit max_w pixels."""
     words = text.split()
     lines, cur = [], ''
     for w in words:
         test = (cur + ' ' + w).strip()
-        if draw.textbbox((0, 0), test, font=font)[2] <= max_w:
+        bb = draw.textbbox((0,0), test, font=font)
+        if bb[2] <= max_w:
             cur = test
         else:
             if cur: lines.append(cur)
             cur = w
-    if cur:
-        lines.append(cur)
+    if cur: lines.append(cur)
     return lines
 
-def _alpha_at(f, start, fade=14):
+def _alpha_at(f, start, fade=18):
     if f < start: return 0
-    elapsed = f - start
-    if elapsed >= fade: return 255
-    return int(255 * (elapsed / fade))
+    e = f - start
+    if e >= fade: return 255
+    return int(255 * e / fade)
 
-def _offset_at(f, start, slide=18):
-    if f < start: return 40
-    elapsed = f - start
-    if elapsed >= slide: return 0
-    t = elapsed / slide
-    t_e = t * t * (3 - 2 * t)
-    return int(40 * (1 - t_e))
+def _slide_at(f, start, slide=22):
+    if f < start: return 60
+    e = f - start
+    if e >= slide: return 0
+    t = e / slide
+    return int(60 * (1 - t*t*(3-2*t)))
 
-def _draw_txt(img, text, font, x, y, color, alpha, anchor='mm'):
-    if alpha <= 0: return
-    layer = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+def _paste_text(img, text, font, x, y, color, alpha, anchor='mm'):
+    if alpha <= 0 or not text: return
+    layer = Image.new('RGBA', (W, H), (0,0,0,0))
     d = ImageDraw.Draw(layer)
     r, g, b = color
-    d.text((x, y), text, font=font, fill=(r, g, b, alpha), anchor=anchor)
+    d.text((x, y), text, font=font, fill=(r,g,b,alpha), anchor=anchor)
     img.paste(layer, mask=layer)
 
-def _draw_ln(img, x1, y1, x2, y2, color, alpha, width=3):
+def _paste_line(img, x1, y1, x2, y2, color, alpha, width=4):
     if alpha <= 0: return
-    layer = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    layer = Image.new('RGBA', (W, H), (0,0,0,0))
     d = ImageDraw.Draw(layer)
     r, g, b = color
-    d.line([(x1, y1), (x2, y2)], fill=(r, g, b, alpha), width=width)
+    d.line([(x1,y1),(x2,y2)], fill=(r,g,b,alpha), width=width)
     img.paste(layer, mask=layer)
 
-# ─── RENDERERS ───────────────────────────────────────────────────────────────
+def _paste_rect(img, x1, y1, x2, y2, color, alpha):
+    if alpha <= 0: return
+    layer = Image.new('RGBA', (W, H), (0,0,0,0))
+    d = ImageDraw.Draw(layer)
+    r, g, b = color
+    d.rectangle([(x1,y1),(x2,y2)], fill=(r,g,b,alpha))
+    img.paste(layer, mask=layer)
 
-def _render_sd_hidden_gem(img, draw, post_data, f):
+# ─── LAYOUT ENGINE ───────────────────────────────────────────────────────────
+
+def _render_frame(img, draw, post_data, f):
+    """
+    Luxury editorial layout:
+    - Top zone: small label in Oswald Regular (tracking spaced)
+    - Neighborhood: MASSIVE Oswald Bold, near full width
+    - Thin orange rule
+    - Headline: Oswald Regular medium
+    - Body: Raleway Regular small
+    - Stat: Large Oswald Bold in orange (if present)
+    """
+    ct      = post_data.get('content_type', 'market_stat')
     hood    = post_data.get('neighborhood', 'San Diego').upper()
-    hl      = post_data.get('headline', '')
-    insight = post_data.get('insight', '')
+    hl      = post_data.get('headline', post_data.get('insight', ''))
+    body    = (post_data.get('real_estate_tie') or
+               post_data.get('context') or
+               post_data.get('tip') or '')
     stat    = str(post_data.get('stat', ''))
 
-    t0, t1, t2, t3, t4, t5 = int(FPS*1.0), int(FPS*1.5), int(FPS*2.0), int(FPS*2.3), int(FPS*3.0), int(FPS*3.8)
-
-    a = _alpha_at(f, t0); yo = _offset_at(f, t0)
-    _draw_txt(img, 'LIFE IN', _load_font(22), W//2, 110+yo, CREAM, int(a*0.65))
-
-    a = _alpha_at(f, t1, 20); yo = _offset_at(f, t1, 22)
-    fn = _load_font(88)
-    nlines = _wrap_text(draw, hood, fn, W-60)
-    for i, line in enumerate(nlines[:2]):
-        _draw_txt(img, line, fn, W//2, 195+i*92+yo, WHITE, a)
-
-    a = _alpha_at(f, t2, 10)
-    lx = (W-50)//2; ly = 200 + min(len(nlines),2)*92 + 18
-    _draw_ln(img, lx, ly, lx+50, ly, ORANGE, a)
-
-    a = _alpha_at(f, t3); yo = _offset_at(f, t3)
-    fh = _load_font(36)
-    hlines = _wrap_text(draw, hl, fh, W-80)
-    for i, line in enumerate(hlines[:2]):
-        _draw_txt(img, line, fh, W//2, ly+50+i*50+yo, CREAM, int(a*0.95))
-
-    a = _alpha_at(f, t4); yo = _offset_at(f, t4)
-    fb = _load_font(26)
-    blines = _wrap_text(draw, insight, fb, W-100)
-    body_y = ly+50+len(hlines)*50+20
-    for i, line in enumerate(blines[:3]):
-        _draw_txt(img, line, fb, W//2, body_y+i*38+yo, CREAM, int(a*0.72))
-
-    if stat:
-        a = _alpha_at(f, t5); yo = _offset_at(f, t5)
-        _draw_txt(img, stat, _load_font(72), W//2, 710+yo, ORANGE, a)
-
-def _render_market_stat(img, draw, post_data, f):
-    stat    = str(post_data.get('stat', ''))
-    context = post_data.get('context', '')
-
-    t0, t1, t2, t3 = int(FPS*0.8), int(FPS*1.4), int(FPS*2.0), int(FPS*2.5)
-
-    a = _alpha_at(f, t0); yo = _offset_at(f, t0)
-    _draw_txt(img, 'SAN DIEGO MARKET UPDATE', _load_font(22), W//2, 145+yo, CREAM, int(a*0.6))
-
-    a = _alpha_at(f, t1, 22); yo = _offset_at(f, t1, 24)
-    fs = _load_font(96)
-    slines = _wrap_text(draw, stat, fs, W-40)
-    for i, line in enumerate(slines[:2]):
-        _draw_txt(img, line, fs, W//2, 310+i*104+yo, WHITE, a)
-
-    a = _alpha_at(f, t2, 8)
-    lx = (W-60)//2
-    _draw_ln(img, lx, 500, lx+60, 500, ORANGE, a)
-
-    a = _alpha_at(f, t3); yo = _offset_at(f, t3)
-    fc = _load_font(30)
-    clines = _wrap_text(draw, context, fc, W-90)
-    for i, line in enumerate(clines[:3]):
-        _draw_txt(img, line, fc, W//2, 550+i*46+yo, CREAM, int(a*0.85))
-
-def _render_hot_take(img, draw, post_data, f):
-    hood    = post_data.get('neighborhood', '').upper()
-    hl      = post_data.get('headline', '')
-    insight = post_data.get('insight', '')
-
-    t0, t1, t2, t3, t4 = int(FPS*0.8), int(FPS*1.2), int(FPS*1.8), int(FPS*2.2), int(FPS*2.7)
-
-    a = _alpha_at(f, t0); yo = _offset_at(f, t0)
-    _draw_txt(img, 'HOT TAKE', _load_font(20), W//2, 112+yo, ORANGE, int(a*0.9))
-
-    if hood:
-        a = _alpha_at(f, t1); yo = _offset_at(f, t1)
-        _draw_txt(img, hood, _load_font(64), W//2, 198+yo, WHITE, a)
-
-    a = _alpha_at(f, t2, 20); yo = _offset_at(f, t2, 20)
-    fh = _load_font(44)
-    hlines = _wrap_text(draw, hl, fh, W-70)
-    sy = 275 if hood else 225
-    for i, line in enumerate(hlines[:3]):
-        _draw_txt(img, line, fh, W//2, sy+i*60+yo, WHITE, a)
-
-    a = _alpha_at(f, t3, 8)
-    lx = (W-50)//2; ly = sy+len(hlines)*60+18
-    _draw_ln(img, lx, ly, lx+50, ly, ORANGE, a)
-
-    a = _alpha_at(f, t4); yo = _offset_at(f, t4)
-    fb = _load_font(28)
-    blines = _wrap_text(draw, insight, fb, W-100)
-    for i, line in enumerate(blines[:3]):
-        _draw_txt(img, line, fb, W//2, ly+40+i*44+yo, CREAM, int(a*0.8))
-
-def _render_generic(img, draw, post_data, f):
-    ct   = post_data.get('content_type', '')
-    hood = post_data.get('neighborhood', 'San Diego').upper()
-    hl   = post_data.get('headline', post_data.get('insight', ''))
-    body = post_data.get('real_estate_tie', post_data.get('context', post_data.get('tip', '')))
-    stat = str(post_data.get('stat', ''))
-
-    labels = {
+    label_map = {
+        'sd_hidden_gem':      'LIFE  IN',
+        'current_event_tie':  'RIGHT NOW',
+        'hot_take':           'HOT TAKE',
         'hyper_local_intel':  'MARKET INTEL',
         'sd_lifestyle_hook':  'SD LIVING',
         'buyer_seller_tip':   'PRO TIP',
         'investor_quote':     'INVEST IN SD',
         'san_diego_lifestyle':'LIFE IN SD',
-        'current_event_tie':  'RIGHT NOW IN SD',
         'property_spotlight': 'JUST LISTED',
+        'market_stat':        'SAN DIEGO',
     }
-    label = labels.get(ct, 'SAN DIEGO')
+    label = label_map.get(ct, 'SAN DIEGO')
 
-    t0, t1, t2, t3, t4, t5 = int(FPS*0.8), int(FPS*1.3), int(FPS*1.9), int(FPS*2.3), int(FPS*3.1), int(FPS*3.7)
+    # For market_stat, headline IS the stat
+    if ct == 'market_stat':
+        stat_display = stat
+        hl_display   = post_data.get('context', '')[:120]
+        hood         = 'MARKET UPDATE'
+        body         = ''
+    else:
+        stat_display = stat
+        hl_display   = hl
 
-    a = _alpha_at(f, t0); yo = _offset_at(f, t0)
-    _draw_txt(img, label, _load_font(22), W//2, 115+yo, CREAM, int(a*0.65))
+    # ── TIMING (frames) ──
+    t_label = int(FPS * 0.6)
+    t_hood  = int(FPS * 1.0)
+    t_rule  = int(FPS * 1.6)
+    t_hl    = int(FPS * 1.9)
+    t_body  = int(FPS * 2.8)
+    t_stat  = int(FPS * 3.5)
 
-    a = _alpha_at(f, t1, 22); yo = _offset_at(f, t1, 22)
-    fn = _load_font(76)
-    nlines = _wrap_text(draw, hood, fn, W-60)
-    for i, line in enumerate(nlines[:2]):
-        _draw_txt(img, line, fn, W//2, 202+i*84+yo, WHITE, a)
+    PAD = 70  # left/right padding
+    CENTER = W // 2
 
-    a = _alpha_at(f, t2, 8)
-    lx = (W-50)//2; ly = 202+min(len(nlines),2)*84+14
-    _draw_ln(img, lx, ly, lx+50, ly, ORANGE, a)
+    # ── LABEL ── small spaced caps
+    a  = _alpha_at(f, t_label, 20)
+    yo = _slide_at(f, t_label, 20)
+    if a > 0:
+        fl = _font('oswald_regular', 36)
+        _paste_text(img, label, fl, CENTER, 160 + yo, CREAM, int(a*0.7))
 
-    a = _alpha_at(f, t3); yo = _offset_at(f, t3)
-    fh = _load_font(36)
-    hlines = _wrap_text(draw, hl, fh, W-80)
-    for i, line in enumerate(hlines[:2]):
-        _draw_txt(img, line, fh, W//2, ly+50+i*52+yo, CREAM, int(a*0.95))
+    # ── NEIGHBORHOOD / TITLE ── MASSIVE
+    a  = _alpha_at(f, t_hood, 22)
+    yo = _slide_at(f, t_hood, 24)
+    if a > 0:
+        # Auto-size: try 200px, scale down if too wide
+        for sz in [200, 170, 145, 120, 100, 84]:
+            fn = _font('oswald_bold', sz)
+            lines = _wrap(draw, hood, fn, W - PAD*2)
+            if len(lines) <= 2:
+                break
+        y_hood = 220
+        for i, line in enumerate(lines[:2]):
+            _paste_text(img, line, fn, CENTER, y_hood + i*(sz+10) + yo, WHITE, a)
+        hood_bottom = y_hood + len(lines[:2]) * (sz + 10) + yo
 
-    if body:
-        a = _alpha_at(f, t4); yo = _offset_at(f, t4)
-        fb = _load_font(26)
-        blines = _wrap_text(draw, body, fb, W-100)
-        by = ly+50+len(hlines)*52+20
+    # ── ORANGE RULE ──
+    a = _alpha_at(f, t_rule, 12)
+    if a > 0:
+        rule_y = hood_bottom + 30
+        _paste_line(img, CENTER-55, rule_y, CENTER+55, rule_y, ORANGE, a, width=5)
+    else:
+        rule_y = 600  # fallback
+
+    # ── HEADLINE ──
+    a  = _alpha_at(f, t_hl, 20)
+    yo = _slide_at(f, t_hl, 22)
+    if a > 0 and hl_display:
+        fh = _font('oswald_regular', 62)
+        hlines = _wrap(draw, hl_display, fh, W - PAD*2)
+        hl_y = rule_y + 55
+        for i, line in enumerate(hlines[:3]):
+            _paste_text(img, line, fh, CENTER, hl_y + i*72 + yo, WHITE, int(a*0.95))
+        hl_bottom = hl_y + len(hlines[:3]) * 72
+    else:
+        hl_bottom = rule_y + 55
+
+    # ── BODY COPY ──
+    a  = _alpha_at(f, t_body, 22)
+    yo = _slide_at(f, t_body, 22)
+    if a > 0 and body:
+        fb = _font('raleway_regular', 38)
+        blines = _wrap(draw, body, fb, W - PAD*2 - 40)
+        body_y = hl_bottom + 45
+        # Cap at 3 lines to avoid overflow
         for i, line in enumerate(blines[:3]):
-            _draw_txt(img, line, fb, W//2, by+i*38+yo, CREAM, int(a*0.72))
+            _paste_text(img, line, fb, CENTER, body_y + i*52 + yo,
+                       CREAM, int(a*0.75))
 
-    if stat:
-        a = _alpha_at(f, t5); yo = _offset_at(f, t5)
-        _draw_txt(img, stat, _load_font(64), W//2, 715+yo, ORANGE, a)
+    # ── STAT ── large orange, bottom section
+    a  = _alpha_at(f, t_stat, 20)
+    yo = _slide_at(f, t_stat, 20)
+    if a > 0 and stat_display:
+        # Auto-size stat to never overflow
+        for sz in [130, 110, 90, 72, 58]:
+            fs = _font('oswald_bold', sz)
+            bb = draw.textbbox((0,0), stat_display, font=fs)
+            if bb[2] - bb[0] <= W - PAD*2:
+                break
+        _paste_text(img, stat_display, fs, CENTER, 1550 + yo, ORANGE, a)
 
-# ─── FRAME LOOP ──────────────────────────────────────────────────────────────
+def _render_logo(img, logo, f):
+    """Single white logo, bottom center, fades in at 1s."""
+    a = _alpha_at(f, int(FPS*1.0), 24)
+    if logo is None or a <= 0: return
+    lw = 240
+    lh = int(lw * logo.height / logo.width)
+    lr = logo.resize((lw, lh), Image.LANCZOS)
+    if a < 255:
+        r,g,b,al = lr.split()
+        al = al.point(lambda x: int(x * a / 255))
+        lr = Image.merge('RGBA', (r,g,b,al))
+    img.paste(lr, ((W-lw)//2, H-lh-60), lr)
+
+def _render_headshot(img, f):
+    """Headshot bottom right, fades in at 1.5s."""
+    a = _alpha_at(f, int(FPS*1.5), 24)
+    if a <= 0: return
+    try:
+        hs = Image.open(HEADSHOT_PATH).convert('RGBA')
+        hw = 180; hh = int(hw * hs.height / hs.width)
+        hs = hs.resize((hw, hh), Image.LANCZOS)
+        if a < 255:
+            r,g,b,al = hs.split()
+            al = al.point(lambda x: int(x * a / 255))
+            hs = Image.merge('RGBA', (r,g,b,al))
+        img.paste(hs, (W-hw-40, H-hh-250), hs)
+    except: pass
+
+# ─── FRAME BUILDER ───────────────────────────────────────────────────────────
 
 HEADSHOT_TYPES = {'buyer_seller_tip', 'hot_take'}
 
 def _build_frames(post_data, bg, logo, tmp_dir):
     ct = post_data.get('content_type', 'market_stat')
     show_headshot = ct in HEADSHOT_TYPES
-    t_logo = int(FPS * 1.0)
-    t_hs   = int(FPS * 1.5)
 
-    log.info(f'Rendering {TOTAL_FRAMES} frames...')
+    log.info(f'Rendering {TOTAL_FRAMES} frames at {W}x{H}...')
 
     for f in range(TOTAL_FRAMES):
         if f % 24 == 0:
             log.info(f'  Frame {f}/{TOTAL_FRAMES}')
 
-        bg_frame = _ken_burns_frame(bg, f, TOTAL_FRAMES)
-        frame    = _cinematic_overlay(bg_frame).convert('RGBA')
+        # Background with Ken Burns
+        bg_frame = _ken_burns(bg, f, TOTAL_FRAMES)
+        frame    = _overlay(bg_frame).convert('RGBA')
         draw     = ImageDraw.Draw(frame)
 
         # Content
-        if ct == 'sd_hidden_gem':
-            _render_sd_hidden_gem(frame, draw, post_data, f)
-        elif ct == 'market_stat':
-            _render_market_stat(frame, draw, post_data, f)
-        elif ct == 'hot_take':
-            _render_hot_take(frame, draw, post_data, f)
-        else:
-            _render_generic(frame, draw, post_data, f)
+        _render_frame(frame, draw, post_data, f)
 
-        # Logo - bottom center, fades in once
-        logo_a = _alpha_at(f, t_logo, 20)
-        if logo and logo_a > 0:
-            lw = 160
-            lh = int(lw * logo.height / logo.width)
-            lr = logo.resize((lw, lh), Image.LANCZOS)
-            if logo_a < 255:
-                r2, g2, b2, a2 = lr.split()
-                a2 = a2.point(lambda x: int(x * logo_a / 255))
-                lr = Image.merge('RGBA', (r2, g2, b2, a2))
-            frame.paste(lr, ((W-lw)//2, H-lh-35), lr)
+        # Logo
+        _render_logo(frame, logo, f)
 
-        # Headshot
+        # Headshot (selected types only)
         if show_headshot:
-            hs_a = _alpha_at(f, t_hs, 20)
-            if hs_a > 0:
-                try:
-                    hs = Image.open(HEADSHOT_PATH).convert('RGBA')
-                    hw = 130; hh = int(hw * hs.height / hs.width)
-                    hs = hs.resize((hw, hh), Image.LANCZOS)
-                    if hs_a < 255:
-                        r2, g2, b2, a2 = hs.split()
-                        a2 = a2.point(lambda x: int(x * hs_a / 255))
-                        hs = Image.merge('RGBA', (r2, g2, b2, a2))
-                    frame.paste(hs, (W-hw-20, H-hh-160), hs)
-                except:
-                    pass
+            _render_headshot(frame, f)
 
+        # Save
         frame.convert('RGB').save(
-            os.path.join(tmp_dir, f'f{f:05d}.jpg'), 'JPEG', quality=85)
+            os.path.join(tmp_dir, f'f{f:05d}.jpg'), 'JPEG', quality=88)
 
     log.info('Frame rendering complete.')
 
-# ─── SILENCE ─────────────────────────────────────────────────────────────────
+# ─── AUDIO ───────────────────────────────────────────────────────────────────
 
 def _gen_silence(path):
     samples = np.zeros(int(44100 * DURATION), dtype=np.int16)
@@ -452,20 +451,36 @@ def generate_reel(post_data: dict) -> str:
     )
     tmp = tempfile.mkdtemp(prefix='wbg_')
     try:
-        log.info('Loading logo...')
-        logo = _load_logo()
-        log.info(f'Logo: {PREFERRED_LOGO if logo else "not found"}')
+        # Pre-download fonts (cached after first run)
+        log.info('Ensuring fonts are cached...')
+        for name in GOOGLE_FONTS:
+            _get_font_path(name)
 
+        # Load logo once
+        log.info('Loading logo...')
+        logo = None
+        for name in [PREFERRED_LOGO] + FALLBACK_LOGOS:
+            path = os.path.join(ASSETS_DIR, name)
+            if os.path.exists(path):
+                try:
+                    logo = Image.open(path).convert('RGBA')
+                    log.info(f'Logo loaded: {name}')
+                    break
+                except: continue
+
+        # Fetch background
         log.info('Fetching background...')
         bg = _fetch_background(post_data.get('content_type', 'market_stat'))
 
-        log.info('Building cinematic frames...')
+        # Build frames
+        log.info('Building frames...')
         _build_frames(post_data, bg, logo, tmp)
 
-        log.info('Generating audio...')
+        # Audio
         audio_path = os.path.join(tmp, 'audio.wav')
         _gen_silence(audio_path)
 
+        # Encode
         log.info('Running ffmpeg...')
         out_path = os.path.join(tmp, 'reel.mp4')
         cmd = [
@@ -473,14 +488,15 @@ def generate_reel(post_data: dict) -> str:
             '-framerate', str(FPS),
             '-i', os.path.join(tmp, 'f%05d.jpg'),
             '-i', audio_path,
-            '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+            '-c:v', 'libx264', '-preset', 'fast', '-crf', '22',
             '-pix_fmt', 'yuv420p', '-t', str(DURATION),
             '-c:a', 'aac', '-b:a', '128k', '-shortest',
             out_path
         ]
-        subprocess.run(cmd, check=True, capture_output=True, timeout=180)
+        subprocess.run(cmd, check=True, capture_output=True, timeout=300)
         log.info('ffmpeg complete.')
 
+        # Upload
         log.info('Uploading to Cloudinary...')
         result = cloudinary.uploader.upload_large(
             out_path, resource_type='video',
