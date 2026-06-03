@@ -82,39 +82,65 @@ PEXELS_BY_TYPE = {
     'property_spotlight': ['1396122','259588','1029599','323780','2467285'],
 }
 
-# Photo pools by style - local files in assets folder
-DARK_PHOTOS  = ['sunset_1.jpg', 'sunset_beach.jpg', 'aerial_city_1.jpg',
-                'neighborhood_1.jpg', 'craftsman_1.jpg', 'palm_street_1.jpg']
-LIGHT_PHOTOS = ['luxury_home_1.jpg', 'luxury_home_2.jpg', 'luxury_home_3.jpg',
-                'modern_house_1.jpg', 'modern_house_2.jpg', 'pool_home_1.jpg',
-                'modern_interior_1.jpg', 'modern_interior_2.jpg']
-ALL_PHOTOS   = DARK_PHOTOS + LIGHT_PHOTOS
+PHOTO_STATE_FILE = '/tmp/wbg_photo_state.json'
+
+def _get_photo_pool(is_dark):
+    all_jpgs = sorted([
+        f for f in os.listdir(ASSETS_DIR)
+        if f.endswith('.jpg') and os.path.exists(os.path.join(ASSETS_DIR, f))
+    ])
+    dark_kw  = ['sunset', 'aerial', 'neighborhood', 'palm', 'craftsman',
+                'coast', 'beach', 'street', 'city', 'urban']
+    light_kw = ['luxury', 'modern', 'house', 'home', 'interior',
+                'pool', 'kitchen', 'living', 'bedroom', 'backyard']
+    dark_pool  = [f for f in all_jpgs if any(k in f.lower() for k in dark_kw)]
+    light_pool = [f for f in all_jpgs if any(k in f.lower() for k in light_kw)]
+    if len(dark_pool)  < 3: dark_pool  = all_jpgs
+    if len(light_pool) < 3: light_pool = all_jpgs
+    return dark_pool if is_dark else light_pool
+
+def _pick_photo(is_dark):
+    pool = _get_photo_pool(is_dark)
+    state = {}
+    try:
+        if os.path.exists(PHOTO_STATE_FILE):
+            with open(PHOTO_STATE_FILE, 'r') as f:
+                state = json.load(f)
+    except:
+        state = {}
+    key  = 'used_dark' if is_dark else 'used_light'
+    used = set(state.get(key, []))
+    unused = [p for p in pool if p not in used]
+    if not unused:
+        log.info('Photo pool exhausted, resetting rotation')
+        unused = pool
+        used   = set()
+    chosen = random.choice(unused)
+    used.add(chosen)
+    state[key] = list(used)
+    try:
+        with open(PHOTO_STATE_FILE, 'w') as f:
+            json.dump(state, f)
+    except:
+        pass
+    log.info(f'Photo: {chosen} ({len(unused)-1} unused left of {len(pool)})')
+    return chosen
 
 def _fetch_bg(content_type, neighborhood='', size_w=None, size_h=None):
     bw = size_w or int(W * 1.12)
     bh = size_h or int(H * 1.12)
-
-    # Pick from local curated photo library
     is_dark = content_type in DARK_TYPES
-    pool = DARK_PHOTOS if is_dark else LIGHT_PHOTOS
-
-    # Filter to photos that actually exist
-    available = [p for p in pool if os.path.exists(os.path.join(ASSETS_DIR, p))]
-    if not available:
-        available = [p for p in ALL_PHOTOS if os.path.exists(os.path.join(ASSETS_DIR, p))]
-
-    if available:
-        chosen = random.choice(available)
+    chosen  = _pick_photo(is_dark)
+    path    = os.path.join(ASSETS_DIR, chosen)
+    if chosen and os.path.exists(path):
         try:
-            bg = Image.open(os.path.join(ASSETS_DIR, chosen)).convert('RGB')
+            bg = Image.open(path).convert('RGB')
             ratio = max(bw/bg.width, bh/bg.height)
             bg = bg.resize((int(bg.width*ratio), int(bg.height*ratio)), Image.LANCZOS)
-            log.info(f'Local photo: {chosen}')
             return bg
         except Exception as e:
-            log.warning(f'Local photo failed: {e}')
-
-    log.warning('No photos available, using gradient')
+            log.warning(f'Photo load failed for {chosen}: {e}')
+    log.warning('Falling back to gradient')
     return _gradient(bw, bh)
 
 def _gradient(w, h):
