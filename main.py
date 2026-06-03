@@ -28,7 +28,8 @@ _post_index = [0]
 def run_post(slot='morning'):
     log.info(f'--- Starting {slot} post ---')
     try:
-        ct = CONTENT_TYPES[_post_index[0] % len(CONTENT_TYPES)]
+        import random as _r
+        ct = _r.choice(CONTENT_TYPES)
         _post_index[0] += 1
         post_data = generate_post(ct, ANTHROPIC_KEY)
         log.info(f'Content type: {ct}')
@@ -78,10 +79,10 @@ def debug_post():
 
     except Exception as e:
         return jsonify({
-            'status':      'error',
-            'step_failed': type(e).__name__,
-            'error':       str(e),
-            'traceback':   traceback.format_exc()
+            'status':       'error',
+            'step_failed':  type(e).__name__,
+            'error':        str(e),
+            'traceback':    traceback.format_exc()
         }), 500
 
 @app.route('/health')
@@ -125,12 +126,8 @@ def safe_scheduler():
         log.error(f'Scheduler crashed: {e}')
         log.error(traceback.format_exc())
 
-try:
-    _scheduler_thread = threading.Thread(target=safe_scheduler, daemon=True)
-    _scheduler_thread.start()
-except Exception as e:
-    import sys
-    print(f'Scheduler failed to start: {e}', file=sys.stderr, flush=True)
+_scheduler_thread = threading.Thread(target=safe_scheduler, daemon=True)
+_scheduler_thread.start()
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
