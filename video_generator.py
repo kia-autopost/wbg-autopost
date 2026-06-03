@@ -101,6 +101,16 @@ def _get_photo_pool(is_dark):
 
 def _pick_photo(is_dark):
     pool = _get_photo_pool(is_dark)
+
+    # Safety: if pool is empty fall back to all jpgs
+    if not pool:
+        all_jpgs = [f for f in os.listdir(ASSETS_DIR) if f.endswith('.jpg')]
+        pool = all_jpgs if all_jpgs else []
+
+    if not pool:
+        log.warning('No photos in assets folder')
+        return None
+
     state = {}
     try:
         if os.path.exists(PHOTO_STATE_FILE):
@@ -108,21 +118,27 @@ def _pick_photo(is_dark):
                 state = json.load(f)
     except:
         state = {}
+
     key  = 'used_dark' if is_dark else 'used_light'
     used = set(state.get(key, []))
     unused = [p for p in pool if p not in used]
+
+    # Reset if exhausted or if unused pool is empty
     if not unused:
-        log.info('Photo pool exhausted, resetting rotation')
+        log.info(f'Photo pool exhausted ({key}), resetting rotation')
         unused = pool
         used   = set()
+
     chosen = random.choice(unused)
     used.add(chosen)
     state[key] = list(used)
+
     try:
         with open(PHOTO_STATE_FILE, 'w') as f:
             json.dump(state, f)
     except:
         pass
+
     log.info(f'Photo: {chosen} ({len(unused)-1} unused left of {len(pool)})')
     return chosen
 
