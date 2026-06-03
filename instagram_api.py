@@ -4,7 +4,7 @@ import cloudinary, cloudinary.uploader
 log = logging.getLogger('WBG')
 
 # Long-lived token - valid for 60 days from June 2, 2026
-IG_ACCESS_TOKEN = "EAAXXdtljzesBRmV284OC2FAflAKhbACJ1dXxhZCLyo44F2iiS8OrmQHJjbkV4ZCEZAnV9baRDyoZCgoEjuUlKRe15hkBG6ZBlixU8iVDvv2CjcRihVaPWicSWU8zHlFUvASRSWBG4IssE4U22X1qe0yItjNmWBXzUGYc8mqTyZCTYn1G33pE2KolzRhIIViDambSovJ61TdGicNE54I0dZAMMrGDCa08KQ5jgBFmT5ZAf7PSZAHByB3qqfZAqRCZAsSNN72BM1kWyusUs3XvbEZBopf0iAZDZD"
+IG_ACCESS_TOKEN = "EAAXXdtljzesBRs8Fs38tisah4hBZCAoImisQrTTnfK597QAxpZAY7pLsXCU0eRn7QGczMs0WZCkbrsjUseYGJRnVRVQN0iWc16ycRZAJA5ZAZB9YNjXK4NTjRRhMHnMJZAgZCK6Rq8ZC1ewgZAi6JJSFN62OHO8iMqcF9HU3zclhCW55yhOHM4syfZCbhgQeFb22rv0qZBAL"
 
 def _upload_to_cloudinary(video_path, cloud, key, secret):
     if isinstance(video_path, str) and video_path.startswith('http'):
@@ -60,7 +60,7 @@ def _publish(ig_user_id, container_id):
     return media_id
 
 def post_reel_to_instagram(video_path, caption, ig_user_id, access_token, cld_cloud, cld_key, cld_secret):
-    log.info(f'Using hardcoded token: {IG_ACCESS_TOKEN[:20]}...')
+    log.info(f'Using token: {IG_ACCESS_TOKEN[:20]}...')
     video_url    = _upload_to_cloudinary(video_path, cld_cloud, cld_key, cld_secret)
     container_id = _create_container(ig_user_id, video_url, caption)
     _wait_for_ready(container_id)
