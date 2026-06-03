@@ -1,9 +1,15 @@
 """
-WBG Content Generator - v3 Whitney Pierce Local Expert Edition
-Content is first-person Whitney, positioned as the go-to San Diego
-real estate expert.
+WBG Content Generator - v4
+Content types:
+- sd_hidden_gem: surprising neighborhood facts
+- current_event_tie: local events tied to real estate
+- hot_take: bold opinions
+- hyper_local_intel: insider market intel
+- sd_lifestyle_hook: lifestyle moments
+- market_data: REAL web-searched SD neighborhood market stats
+- home_tour: AI-generated fictional luxury property showcase
 """
-import os, random, json
+import os, random, json, re
 import anthropic
 
 CONTENT_TYPES = [
@@ -12,6 +18,8 @@ CONTENT_TYPES = [
     'hot_take',
     'hyper_local_intel',
     'sd_lifestyle_hook',
+    'market_data',
+    'home_tour',
 ]
 
 SD_NEIGHBORHOODS = [
@@ -35,12 +43,20 @@ SD_EVENTS_AND_FACTS = [
     'The Del Mar racetrack season brings thousands of visitors each summer',
     'SD has the second largest naval fleet in the world',
     'Torrey Pines State Reserve has the rarest pine tree in North America',
-    'The SD Zoo is considered one of the best in the world',
     'Coronado Island is actually a peninsula connected by a narrow strip of land',
     'SD has over 300 days of sunshine per year',
     'North Park was named one of the coolest neighborhoods in America',
     'Little Italy in SD is one of the most walkable neighborhoods on the West Coast',
-    'SD has been the fastest appreciating major metro in California over the past decade',
+]
+
+# Price tiers for home tours - mix of aspirational and approachable
+HOME_TOUR_CONFIGS = [
+    # Aspirational luxury
+    {'tier': 'luxury',      'price_range': ('$2.8M', '$8.5M'), 'neighborhoods': ['La Jolla', 'Rancho Santa Fe', 'Coronado', 'Del Mar', 'Bird Rock']},
+    # Upper mid
+    {'tier': 'upper_mid',   'price_range': ('$1.4M', '$2.7M'), 'neighborhoods': ['Carmel Valley', 'Encinitas', 'Solana Beach', 'Mission Hills', 'Pacific Beach']},
+    # Approachable
+    {'tier': 'approachable','price_range': ('$750K', '$1.3M'),  'neighborhoods': ['North Park', 'South Park', 'Kensington', 'Hillcrest', 'Ocean Beach', 'Poway']},
 ]
 
 SYSTEM_PROMPT = """You are writing social media content for Whitney Pierce, a San Diego real estate expert with Whissel Beer Group at eXp Realty.
@@ -50,14 +66,45 @@ Whitney's voice is:
 - Knowledgeable but never stuffy — she makes real estate feel exciting and accessible
 - First-person, conversational — like a text from a knowledgeable friend
 - Specific and local — she knows the neighborhoods intimately
-- Occasionally surprising people with facts they didn't know about SD
 
 CRITICAL RULES:
 - The "stat" field must be SHORT — a number, year, or brief phrase under 20 characters (e.g. "1907", "300 days", "$1.2M", "2.2 miles"). NEVER a full sentence.
-- ALL content must be specifically about the neighborhood named in the prompt. Do NOT substitute a different San Diego neighborhood or landmark.
+- ALL content must be specifically about the neighborhood named in the prompt.
 - Never use generic real estate language. No "dream home" or "motivated seller."
 - Be specific, be human, be Whitney.
 - Always return ONLY valid JSON, no markdown, no preamble."""
+
+
+def _search_market_data(neighborhood, api_key):
+    """Use Claude with web search to get real current market data for a neighborhood."""
+    client = anthropic.Anthropic(api_key=api_key)
+    
+    search_prompt = f"""Search for current real estate market data for {neighborhood}, San Diego, CA.
+Find: median home price, average days on market, year-over-year price change, and inventory level.
+Use Redfin, Zillow, or Realtor.com data. Return ONLY valid JSON with these exact fields:
+{{
+  "median_price": "e.g. $1.2M or $875K",
+  "days_on_market": "e.g. 12 days",
+  "price_change_yoy": "e.g. +8.2% or -3.1%",
+  "inventory": "e.g. 45 homes or low/high",
+  "market_temp": "hot/warm/cool/cold",
+  "key_insight": "one sentence about what makes this market unique right now"
+}}
+If you cannot find specific {neighborhood} data, use San Diego County data and note it."""
+
+    msg = client.messages.create(
+        model=os.getenv('ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
+        max_tokens=500,
+        messages=[{'role': 'user', 'content': search_prompt}],
+        tools=[{'type': 'web_search_20250305', 'name': 'web_search'}]
+    )
+    
+    # Extract text from response
+    full_text = ' '.join([b.text for b in msg.content if hasattr(b, 'text') and b.text])
+    s, e = full_text.find('{'), full_text.rfind('}')
+    if s >= 0 and e > s:
+        return json.loads(full_text[s:e+1])
+    return None
 
 
 def generate_post(content_type: str = None, api_key: str = None) -> dict:
@@ -70,6 +117,99 @@ def generate_post(content_type: str = None, api_key: str = None) -> dict:
     sd_fact      = random.choice(SD_EVENTS_AND_FACTS)
     client       = anthropic.Anthropic(api_key=api_key)
 
+    # ── MARKET DATA ──────────────────────────────────────────────────────────
+    if content_type == 'market_data':
+        # Get real market data via web search
+        market = _search_market_data(neighborhood, api_key)
+        
+        if not market:
+            market = {
+                'median_price': 'data unavailable',
+                'days_on_market': 'N/A',
+                'price_change_yoy': 'N/A',
+                'inventory': 'N/A',
+                'market_temp': 'active',
+                'key_insight': f'{neighborhood} remains a sought-after San Diego market.'
+            }
+
+        prompt = f"""Whitney Pierce is sharing real market data for {neighborhood}, San Diego.
+Here is the current market data: {json.dumps(market)}
+
+Write a post in Whitney's voice interpreting this data for buyers and sellers.
+Make it feel like insider knowledge, not a press release.
+
+Return ONLY valid JSON:
+{{
+  "content_type": "market_data",
+  "neighborhood": "{neighborhood}",
+  "headline": "punchy market headline for {neighborhood} (max 8 words)",
+  "median_price": "{market.get('median_price', 'N/A')}",
+  "days_on_market": "{market.get('days_on_market', 'N/A')}",
+  "price_change_yoy": "{market.get('price_change_yoy', 'N/A')}",
+  "inventory": "{market.get('inventory', 'N/A')}",
+  "market_temp": "{market.get('market_temp', 'active')}",
+  "stat": "the single most impressive stat under 20 chars (e.g. '$1.2M median' or '9 days DOM')",
+  "insight": "Whitney's 1-2 sentence take on what this data means for real buyers/sellers in {neighborhood}",
+  "caption": "3-4 sentences from Whitney interpreting the {neighborhood} market right now. Specific, actionable, no fluff. End with a question or call to action.",
+  "hashtags": "#WhisselBeerGroup #SanDiego #{neighborhood.replace(' ','')} #SanDiegoRealEstate #MarketUpdate #SDMarket #ExpRealty #WhitneyPierceWBG"
+}}"""
+
+        msg = client.messages.create(
+            model=os.getenv('ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
+            max_tokens=800,
+            system=SYSTEM_PROMPT,
+            messages=[{'role': 'user', 'content': prompt}]
+        )
+        raw = msg.content[0].text.strip()
+        s, e = raw.find('{'), raw.rfind('}')
+        return json.loads(raw[s:e+1])
+
+    # ── HOME TOUR ─────────────────────────────────────────────────────────────
+    if content_type == 'home_tour':
+        # Pick a random price tier (mix of luxury and approachable)
+        config = random.choice(HOME_TOUR_CONFIGS)
+        tier   = config['tier']
+        
+        # Pick neighborhood from tier's list, or fall back to random
+        hood_pool = [n for n in config['neighborhoods'] if n in SD_NEIGHBORHOODS]
+        neighborhood = random.choice(hood_pool) if hood_pool else random.choice(SD_NEIGHBORHOODS)
+        
+        # Generate price within tier range
+        low_str, high_str = config['price_range']
+        
+        prompt = f"""Create a fictional luxury property showcase post for Whitney Pierce featuring a home in {neighborhood}, San Diego.
+Price tier: {tier} (range: {low_str} - {high_str})
+Generate a compelling, specific fictional property — real architectural details, specific features, no generic descriptions.
+
+Return ONLY valid JSON:
+{{
+  "content_type": "home_tour",
+  "neighborhood": "{neighborhood}",
+  "tier": "{tier}",
+  "price": "specific price in this range: {low_str}-{high_str} (e.g. '$1,895,000')",
+  "beds": "number only (e.g. '4')",
+  "baths": "number only (e.g. '3')",
+  "sqft": "number with comma (e.g. '2,847')",
+  "headline": "compelling property headline max 8 words (NOT 'dream home')",
+  "feature_1": "most impressive feature in 5-6 words (e.g. 'Vaulted ceilings with exposed beams')",
+  "feature_2": "second best feature in 5-6 words (e.g. 'Chef kitchen with Taj Mahal quartz')",
+  "feature_3": "lifestyle feature in 5-6 words (e.g. 'Walk to Del Mar Village')",
+  "stat": "price per sqft or lot size under 20 chars (e.g. '$820/sqft' or '0.4 acre lot')",
+  "caption": "4-5 sentences from Whitney about this property. Start with something that makes you stop scrolling. Specific details, genuine excitement, no clichés. End with a call to action to DM her.",
+  "hashtags": "#WhisselBeerGroup #SanDiego #{neighborhood.replace(' ','')} #JustListed #SanDiegoRealEstate #LuxuryHomes #SDHomes #ExpRealty #WhitneyPierceWBG"
+}}"""
+
+        msg = client.messages.create(
+            model=os.getenv('ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
+            max_tokens=800,
+            system=SYSTEM_PROMPT,
+            messages=[{'role': 'user', 'content': prompt}]
+        )
+        raw = msg.content[0].text.strip()
+        s, e = raw.find('{'), raw.rfind('}')
+        return json.loads(raw[s:e+1])
+
+    # ── EXISTING CONTENT TYPES ────────────────────────────────────────────────
     prompts = {
 
         'sd_hidden_gem': f"""Write a post where Whitney shares a surprising or little-known fact specifically about "{neighborhood}" in San Diego.
