@@ -323,14 +323,16 @@ def _render_dark(img, draw, post_data, f):
             y_cur += 38
         body_bottom = y_cur+yo
 
-    # Stat - flows right after body
+    # Stat - hard truncate to 25 chars, auto-size to fit
     al = _a(f,T['stat'],20); yo = _y(f,T['stat'],20)
     if al and stat:
-        for sz in [72,58,46,38]:
+        # Hard truncate - stat should be a short number/phrase only
+        stat_short = stat[:25].rsplit(' ',1)[0] if len(stat) > 25 else stat
+        for sz in [72,58,46,38,30]:
             fs = _font('oswald_bold',sz)
-            if draw.textbbox((0,0),stat,font=fs)[2] <= W-PAD*2: break
+            if draw.textbbox((0,0),stat_short,font=fs)[2] <= W-PAD*2: break
         stat_y = min(body_bottom+36, H-290)
-        _paste(img, stat, fs, CX, stat_y+yo, ORANGE, al)
+        _paste(img, stat_short, fs, CX, stat_y+yo, ORANGE, al)
 
 # ─── LIGHT EDITORIAL RENDERER ────────────────────────────────────────────────
 
@@ -410,14 +412,15 @@ def _render_light(img, draw, post_data, f):
             y_cur += 34
         body_bottom = y_cur+yo
 
-    # Stat - orange, oswald bold
+    # Stat - orange, oswald bold, hard truncated
     al = _a(f,T['stat'],18); yo = _y(f,T['stat'],18)
     if al and stat:
-        for sz in [70,58,46,38]:
+        stat_short = stat[:25].rsplit(' ',1)[0] if len(stat) > 25 else stat
+        for sz in [70,58,46,38,30]:
             fs = _font('oswald_bold',sz)
-            if draw.textbbox((0,0),stat,font=fs)[2] <= W-PAD*2: break
+            if draw.textbbox((0,0),stat_short,font=fs)[2] <= W-PAD*2: break
         stat_y = min(body_bottom+38, H-270)
-        _paste(img, stat, fs, CX, stat_y+yo, ORANGE, al)
+        _paste(img, stat_short, fs, CX, stat_y+yo, ORANGE, al)
 
 # ─── LOGO ────────────────────────────────────────────────────────────────────
 
