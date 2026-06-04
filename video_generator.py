@@ -1,4 +1,3 @@
-
 """
 WBG Video Generator - V6 Full Bleed + Audio Edition
 - DARK CINEMATIC: sd_hidden_gem, market_stat, current_event_tie, investor_quote
@@ -766,26 +765,128 @@ def _get_audio_track():
     log.info(f'Audio: {chosen} ({len(unused)-1} unused of {len(all_tracks)})')
     return os.path.join(ASSETS_DIR, chosen)
 
-def _prepare_audio(tmp_dir):
-    """Use a music track if available, otherwise silence."""
-    track      = _get_audio_track()
+SOUNDS_DIR = os.path.join(ASSETS_DIR, 'sounds')
+
+def _load_sound(name):
+    """Load a sound effect wav as numpy array."""
+    path = os.path.join(SOUNDS_DIR, name)
+    if not os.path.exists(path):
+        return None, 0
+    try:
+        with wave.open(path, 'r') as wf:
+            frames = wf.readframes(wf.getnframes())
+            samples = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32767.0
+            sr = wf.getframerate()
+        return samples, sr
+    except:
+        return None, 0
+
+def _mix_sound(base, sound_samples, offset_sec, volume=0.8):
+    """Mix sound_samples into base array at offset_sec."""
+    if sound_samples is None or len(sound_samples) == 0:
+        return base
+    offset = int(offset_sec * 44100)
+    end    = min(offset + len(sound_samples), len(base))
+    if offset >= len(base) or end <= offset:
+        return base
+    length = end - offset
+    base[offset:end] += sound_samples[:length] * volume
+    return base
+
+def _prepare_audio(tmp_dir, post_data=None):
+    """
+    Build cinematic sound design track:
+    - Background music track (low volume)
+    - Sound effects timed to text reveals
+    """
+    ct         = post_data.get('content_type', 'sd_hidden_gem') if post_data else 'sd_hidden_gem'
+    total      = int(44100 * DURATION)
+    base       = np.zeros(total, dtype=np.float32)
     audio_path = os.path.join(tmp_dir, 'audio.wav')
+
+    # 1. Background music track at low volume
+    track = _get_audio_track()
     if track and os.path.exists(track):
         try:
             converted = os.path.join(tmp_dir, 'music.wav')
             subprocess.run([
                 imageio_ffmpeg.get_ffmpeg_exe(), '-y',
-                '-i', track,
-                '-t', str(DURATION),
-                '-af', f'afade=t=in:st=0:d=1,afade=t=out:st={DURATION-2}:d=2,volume=0.35',
-                '-ar', '44100', '-ac', '1',
-                converted
+                '-i', track, '-t', str(DURATION),
+                '-af', f'afade=t=in:st=0:d=1.5,afade=t=out:st={DURATION-2}:d=2,volume=0.18',
+                '-ar', '44100', '-ac', '1', '-f', 'wav', converted
             ], check=True, capture_output=True, timeout=30)
-            log.info(f'Audio prepared from {os.path.basename(track)}')
-            return converted
+            with wave.open(converted, 'r') as wf:
+                frames  = wf.readframes(wf.getnframes())
+                music   = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32767.0
+            length = min(len(music), total)
+            base[:length] += music[:length] * 0.18
+            log.info(f'Music: {os.path.basename(track)}')
         except Exception as e:
-            log.warning(f'Audio prep failed: {e}, using silence')
-    _silence(audio_path)
+            log.warning(f'Music failed: {e}')
+
+    # 2. Sound effects timed to content type
+    if ct in ('sd_hidden_gem', 'current_event_tie', 'investor_quote'):
+        # Dark cinematic: bass pulse at open, whoosh on hood reveal, ping on stat
+        s, _ = _load_sound('bass_pulse.wav')
+        base  = _mix_sound(base, s, 0.1, volume=0.7)
+        s, _  = _load_sound('whoosh_cinematic.wav')
+        base  = _mix_sound(base, s, 0.85, volume=0.75)
+        s, _  = _load_sound('ping_stat.wav')
+        base  = _mix_sound(base, s, 3.4, volume=0.65)
+
+    elif ct == 'market_data':
+        # Market data: tension build at open, ping on stat
+        s, _  = _load_sound('tension_build.wav')
+        base  = _mix_sound(base, s, 0.1, volume=0.65)
+        s, _  = _load_sound('whoosh_cinematic.wav')
+        base  = _mix_sound(base, s, 0.85, volume=0.6)
+        s, _  = _load_sound('ping_stat.wav')
+        base  = _mix_sound(base, s, 1.5, volume=0.7)
+        s, _  = _load_sound('ping_stat.wav')
+        base  = _mix_sound(base, s, 2.1, volume=0.55)  # second stat
+
+    elif ct == 'home_tour':
+        # Home tour: soft reveal, chime on price, whoosh on hood
+        s, _  = _load_sound('reveal_soft.wav')
+        base  = _mix_sound(base, s, 0.2, volume=0.6)
+        s, _  = _load_sound('chime_luxury.wav')
+        base  = _mix_sound(base, s, 0.65, volume=0.75)
+        s, _  = _load_sound('whoosh_cinematic.wav')
+        base  = _mix_sound(base, s, 1.05, volume=0.65)
+        s, _  = _load_sound('ping_stat.wav')
+        base  = _mix_sound(base, s, 2.6, volume=0.5)
+
+    elif ct in ('sd_lifestyle_hook', 'san_diego_lifestyle'):
+        # Lifestyle: ambient wave + soft reveal
+        s, _  = _load_sound('ambient_wave.wav')
+        base  = _mix_sound(base, s, 0.0, volume=0.55)
+        s, _  = _load_sound('reveal_soft.wav')
+        base  = _mix_sound(base, s, 0.85, volume=0.6)
+        s, _  = _load_sound('reveal_soft.wav')
+        base  = _mix_sound(base, s, 1.8, volume=0.45)
+
+    else:
+        # Default: whoosh + soft reveal
+        s, _  = _load_sound('whoosh_cinematic.wav')
+        base  = _mix_sound(base, s, 0.85, volume=0.65)
+        s, _  = _load_sound('reveal_soft.wav')
+        base  = _mix_sound(base, s, 1.7, volume=0.55)
+        s, _  = _load_sound('ping_stat.wav')
+        base  = _mix_sound(base, s, 3.3, volume=0.5)
+
+    # Normalize and save
+    peak = np.max(np.abs(base))
+    if peak > 0.95:
+        base = base * (0.92 / peak)
+
+    data = (np.clip(base, -1.0, 1.0) * 32767).astype(np.int16)
+    with wave.open(audio_path, 'w') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(44100)
+        wf.writeframes(data.tobytes())
+
+    log.info('Sound design track built')
     return audio_path
 
 
@@ -809,7 +910,7 @@ def generate_reel(post_data: dict) -> str:
         log.info('Building frames...')
         _build_frames(post_data, bg, tmp)
 
-        audio = _prepare_audio(tmp)
+        audio = _prepare_audio(tmp, post_data)
 
         out = os.path.join(tmp,'reel.mp4')
         log.info('Encoding...')
