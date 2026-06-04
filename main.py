@@ -137,11 +137,26 @@ def scheduler_loop():
         morning_key = f'{date_str}_morning'
         evening_key = f'{date_str}_evening'
 
-        if hhmm == TIME_MORNING and morning_key not in posted_today:
+        # Parse scheduled times for window comparison
+        def _past_time(target_hhmm):
+            th, tm = map(int, target_hhmm.split(':'))
+            nh, nm = now.hour, now.minute
+            return (nh * 60 + nm) >= (th * 60 + tm)
+
+        def _within_window(target_hhmm, window_mins=5):
+            th, tm = map(int, target_hhmm.split(':'))
+            nh, nm = now.hour, now.minute
+            diff = (nh * 60 + nm) - (th * 60 + tm)
+            return 0 <= diff <= window_mins
+
+        # Fire if within 5-minute window after scheduled time (catches sleep drift)
+        if _within_window(TIME_MORNING) and morning_key not in posted_today:
             posted_today.add(morning_key)
+            log.info(f'Firing morning post at {hhmm}')
             threading.Thread(target=run_post, args=('morning',), daemon=True).start()
-        elif hhmm == TIME_EVENING and evening_key not in posted_today:
+        elif _within_window(TIME_EVENING) and evening_key not in posted_today:
             posted_today.add(evening_key)
+            log.info(f'Firing evening post at {hhmm}')
             threading.Thread(target=run_post, args=('evening',), daemon=True).start()
 
         if hhmm == '00:01':
