@@ -765,106 +765,10 @@ def _get_audio_track():
     log.info(f'Audio: {chosen} ({len(unused)-1} unused of {len(all_tracks)})')
     return os.path.join(ASSETS_DIR, chosen)
 
-SOUNDS_DIR = os.path.join(ASSETS_DIR, 'sounds')
-
-def _load_sound(name):
-    """Load a sound effect wav as numpy array."""
-    path = os.path.join(SOUNDS_DIR, name)
-    if not os.path.exists(path):
-        return None, 0
-    try:
-        with wave.open(path, 'r') as wf:
-            frames = wf.readframes(wf.getnframes())
-            samples = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32767.0
-            sr = wf.getframerate()
-        return samples, sr
-    except:
-        return None, 0
-
-def _mix_sound(base, sound_samples, offset_sec, volume=0.8):
-    """Mix sound_samples into base array at offset_sec."""
-    if sound_samples is None or len(sound_samples) == 0:
-        return base
-    offset = int(offset_sec * 44100)
-    end    = min(offset + len(sound_samples), len(base))
-    if offset >= len(base) or end <= offset:
-        return base
-    length = end - offset
-    base[offset:end] += sound_samples[:length] * volume
-    return base
-
 def _prepare_audio(tmp_dir, post_data=None):
-    """
-    Build cinematic sound design track:
-    - Background music track (low volume)
-    - Sound effects timed to text reveals
-    """
-    ct         = post_data.get('content_type', 'sd_hidden_gem') if post_data else 'sd_hidden_gem'
-    total      = int(44100 * DURATION)
-    base       = np.zeros(total, dtype=np.float32)
+    """Generate silent audio track — add music via Instagram after posting."""
     audio_path = os.path.join(tmp_dir, 'audio.wav')
-
-    # 1. No background music - sound effects only for impact
-    # (background music was drowning out the sound design)
-
-    # 2. Sound effects timed to content type - HIGH VOLUME
-    if ct in ('sd_hidden_gem', 'current_event_tie', 'investor_quote'):
-        s, _ = _load_sound('bass_pulse.wav')
-        base  = _mix_sound(base, s, 0.05, volume=1.2)
-        s, _  = _load_sound('whoosh_cinematic.wav')
-        base  = _mix_sound(base, s, 0.8, volume=1.3)
-        s, _  = _load_sound('ping_stat.wav')
-        base  = _mix_sound(base, s, 3.2, volume=1.1)
-
-    elif ct == 'market_data':
-        s, _  = _load_sound('tension_build.wav')
-        base  = _mix_sound(base, s, 0.05, volume=1.1)
-        s, _  = _load_sound('whoosh_cinematic.wav')
-        base  = _mix_sound(base, s, 0.8, volume=1.2)
-        s, _  = _load_sound('ping_stat.wav')
-        base  = _mix_sound(base, s, 1.4, volume=1.2)
-        s, _  = _load_sound('ping_stat.wav')
-        base  = _mix_sound(base, s, 2.0, volume=1.0)
-
-    elif ct == 'home_tour':
-        s, _  = _load_sound('whoosh_cinematic.wav')
-        base  = _mix_sound(base, s, 0.15, volume=1.2)
-        s, _  = _load_sound('chime_luxury.wav')
-        base  = _mix_sound(base, s, 0.6, volume=1.3)
-        s, _  = _load_sound('whoosh_cinematic.wav')
-        base  = _mix_sound(base, s, 1.0, volume=1.1)
-        s, _  = _load_sound('ping_stat.wav')
-        base  = _mix_sound(base, s, 2.5, volume=1.0)
-
-    elif ct in ('sd_lifestyle_hook', 'san_diego_lifestyle'):
-        s, _  = _load_sound('ambient_wave.wav')
-        base  = _mix_sound(base, s, 0.0, volume=1.1)
-        s, _  = _load_sound('reveal_soft.wav')
-        base  = _mix_sound(base, s, 0.8, volume=1.2)
-        s, _  = _load_sound('reveal_soft.wav')
-        base  = _mix_sound(base, s, 1.7, volume=0.9)
-
-    else:
-        s, _  = _load_sound('whoosh_cinematic.wav')
-        base  = _mix_sound(base, s, 0.8, volume=1.2)
-        s, _  = _load_sound('reveal_soft.wav')
-        base  = _mix_sound(base, s, 1.6, volume=1.0)
-        s, _  = _load_sound('ping_stat.wav')
-        base  = _mix_sound(base, s, 3.2, volume=1.0)
-
-    # Normalize and save
-    peak = np.max(np.abs(base))
-    if peak > 0.95:
-        base = base * (0.92 / peak)
-
-    data = (np.clip(base, -1.0, 1.0) * 32767).astype(np.int16)
-    with wave.open(audio_path, 'w') as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(44100)
-        wf.writeframes(data.tobytes())
-
-    log.info('Sound design track built')
+    _silence(audio_path)
     return audio_path
 
 
