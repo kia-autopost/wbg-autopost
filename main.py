@@ -24,20 +24,7 @@ CLD_SECRET    = os.getenv('CLOUDINARY_API_SECRET', '')
 
 app = Flask(__name__)
 
-# Auto-generate sound design assets on startup
-def _init_sounds():
-    sounds_dir = os.path.join(os.path.dirname(__file__), 'assets', 'sounds')
-    if not os.path.exists(sounds_dir) or len(os.listdir(sounds_dir)) < 7:
-        try:
-            log.info('Generating sound design assets...')
-            import subprocess as _sp
-            _sp.run(['python3', '/app/generate_sounds.py'], 
-                   capture_output=True, timeout=30)
-            log.info('Sound assets ready')
-        except Exception as e:
-            log.warning(f'Sound generation failed: {e}')
-
-_init_sounds()
+# Audio: posts go out silent, add trending audio via Instagram after posting
 
 # Lock prevents two posts running simultaneously (avoids caption/video mismatch)
 _post_lock = threading.Lock()
