@@ -105,7 +105,6 @@ def _get_photo_pool(is_dark):
 def _pick_photo(is_dark):
     pool = _get_photo_pool(is_dark)
 
-    # Safety: if pool is empty fall back to all jpgs
     if not pool:
         all_jpgs = [f for f in os.listdir(ASSETS_DIR) if f.endswith('.jpg')]
         pool = all_jpgs if all_jpgs else []
@@ -122,19 +121,25 @@ def _pick_photo(is_dark):
     except:
         state = {}
 
-    key  = 'used_dark' if is_dark else 'used_light'
-    used = set(state.get(key, []))
-    unused = [p for p in pool if p not in used]
+    key        = 'used_dark' if is_dark else 'used_light'
+    used       = set(state.get(key, []))
+    last_photo = state.get('last_photo', '')  # Track very last photo used across all posts
 
-    # Reset if exhausted or if unused pool is empty
+    # Remove recently used photo from consideration to prevent back-to-back repeats
+    unused = [p for p in pool if p not in used and p != last_photo]
+
+    # Reset if exhausted
     if not unused:
         log.info(f'Photo pool exhausted ({key}), resetting rotation')
-        unused = pool
-        used   = set()
+        unused = [p for p in pool if p != last_photo]
+        if not unused:
+            unused = pool
+        used = set()
 
     chosen = random.choice(unused)
     used.add(chosen)
-    state[key] = list(used)
+    state[key]        = list(used)
+    state['last_photo'] = chosen  # Remember across dark/light pools
 
     try:
         with open(PHOTO_STATE_FILE, 'w') as f:
@@ -660,10 +665,12 @@ def _render_home_tour(img, draw, post_data, f):
                 # Truncate feature to fit in panel
                 feat_short = feat[:32].rsplit(' ',1)[0] if len(feat) > 32 else feat
                 feat_lines = _wrap(draw, feat_short, ff, W-PAD*2-30)
+                feat_txt = feat_lines[0] if feat_lines else feat_short
+                # Dark backing pill for readability
+                _paste_backed(img, draw, feat_txt, ff, PAD+25+(W-PAD*2-30)//2, feat_y+yo,
+                             WHITE, int(al*0.92), bg_color=(0,0,0), bg_alpha_mult=0.70,
+                             pad_x=15, pad_y=6, anchor='mm')
                 _paste(img, '▸', _font('oswald_regular',20), PAD+5, feat_y+yo, ORANGE, int(al*0.9))
-                # Shadow for readability on photo
-                _paste(img, feat_lines[0] if feat_lines else feat_short, ff, PAD+26, feat_y+yo+1, BLACK, int(al*0.5), anchor='lm')
-                _paste(img, feat_lines[0] if feat_lines else feat_short, ff, PAD+25, feat_y+yo, WHITE, int(al*0.90), anchor='lm')
                 feat_y += 38
 
     # Stat
