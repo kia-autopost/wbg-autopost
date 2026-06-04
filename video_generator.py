@@ -1,3 +1,4 @@
+
 """
 WBG Video Generator - V6 Full Bleed + Audio Edition
 - DARK CINEMATIC: sd_hidden_gem, market_stat, current_event_tie, investor_quote
@@ -658,20 +659,18 @@ def _render_home_tour(img, draw, post_data, f):
     # Features list
     al = _a(f,T['features'],20); yo = _y(f,T['features'],20)
     if al:
-        ff = _font('raleway',24)
+        ff = _font('oswald_regular', 28)
         feat_y = rule_y + 80
         for feat in [feat1, feat2, feat3]:
             if feat and feat_y+yo < H-250:
-                # Truncate feature to fit in panel
-                feat_short = feat[:32].rsplit(' ',1)[0] if len(feat) > 32 else feat
-                feat_lines = _wrap(draw, feat_short, ff, W-PAD*2-30)
-                feat_txt = feat_lines[0] if feat_lines else feat_short
-                # Dark backing pill for readability
-                _paste_backed(img, draw, feat_txt, ff, PAD+25+(W-PAD*2-30)//2, feat_y+yo,
-                             WHITE, int(al*0.92), bg_color=(0,0,0), bg_alpha_mult=0.70,
-                             pad_x=15, pad_y=6, anchor='mm')
-                _paste(img, '▸', _font('oswald_regular',20), PAD+5, feat_y+yo, ORANGE, int(al*0.9))
-                feat_y += 38
+                feat_short = feat[:38].rsplit(' ',1)[0] if len(feat) > 38 else feat
+                # Full-width semi-transparent dark bar behind each feature
+                bar = Image.new('RGBA', (W, 46), (0,0,0,int(al*0.60)))
+                img.paste(bar, (0, feat_y+yo-20), bar)
+                # Orange arrow + white text
+                _paste(img, '▶', _font('oswald_regular',18), PAD+8, feat_y+yo, ORANGE, int(al*0.9))
+                _paste(img, feat_short, ff, PAD+32, feat_y+yo, WHITE, int(al*0.95), anchor='lm')
+                feat_y += 50
 
     # Stat
     al = _a(f,T['features'],18); yo = _y(f,T['features'],18)
