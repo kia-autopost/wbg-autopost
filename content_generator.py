@@ -1,3 +1,4 @@
+
 """
 WBG Content Generator - v4
 Content types:
@@ -14,29 +15,37 @@ import anthropic
 log = logging.getLogger('WBG')
 
 # Weighted content type pool:
-# home_tour:   2/20 = 10% (~1 per week with 2 posts/day)
-# market_data: 3/20 = 15% (~2 per week)
-# lifestyle/neighborhood: 75% (majority)
+# home_tour:   1/27 = ~3.7% (~1 per week with 2 posts/day)
+# market_data: 3/27 = ~11% (~1-2 per week)
+# lifestyle/neighborhood: ~85%
 CONTENT_TYPES = [
     'sd_hidden_gem',
     'sd_hidden_gem',
     'sd_hidden_gem',
+    'sd_hidden_gem',
+    'sd_hidden_gem',
+    'current_event_tie',
+    'current_event_tie',
     'current_event_tie',
     'current_event_tie',
     'current_event_tie',
     'hot_take',
     'hot_take',
     'hot_take',
+    'hot_take',
+    'hot_take',
+    'hyper_local_intel',
+    'hyper_local_intel',
     'hyper_local_intel',
     'hyper_local_intel',
     'hyper_local_intel',
     'sd_lifestyle_hook',
     'sd_lifestyle_hook',
     'sd_lifestyle_hook',
+    'sd_lifestyle_hook',
     'market_data',
     'market_data',
     'market_data',
-    'home_tour',
     'home_tour',
 ]
 
