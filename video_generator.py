@@ -89,14 +89,17 @@ def _get_photo_pool(is_dark):
         f for f in os.listdir(ASSETS_DIR)
         if f.endswith('.jpg') and os.path.exists(os.path.join(ASSETS_DIR, f))
     ])
+    # If most photos have generic names (like Unsplash hash names),
+    # keyword matching won't work — just use all photos for both pools
     dark_kw  = ['sunset', 'aerial', 'neighborhood', 'palm', 'craftsman',
                 'coast', 'beach', 'street', 'city', 'urban']
     light_kw = ['luxury', 'modern', 'house', 'home', 'interior',
                 'pool', 'kitchen', 'living', 'bedroom', 'backyard']
     dark_pool  = [f for f in all_jpgs if any(k in f.lower() for k in dark_kw)]
     light_pool = [f for f in all_jpgs if any(k in f.lower() for k in light_kw)]
-    if len(dark_pool)  < 3: dark_pool  = all_jpgs
-    if len(light_pool) < 3: light_pool = all_jpgs
+    # If fewer than 10 keyword matches, use ALL photos (most have hash names)
+    if len(dark_pool)  < 10: dark_pool  = all_jpgs
+    if len(light_pool) < 10: light_pool = all_jpgs
     return dark_pool if is_dark else light_pool
 
 def _pick_photo(is_dark):
