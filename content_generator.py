@@ -207,8 +207,18 @@ Return ONLY valid JSON:
         # Generate price within tier range
         low_str, high_str = config['price_range']
         
+        # Generate a truly random price within the tier range
+        import random as _rand
+        low_num  = float(low_str.replace('$','').replace('M','000000').replace('K','000'))
+        high_num = float(high_str.replace('$','').replace('M','000000').replace('K','000'))
+        rand_price = _rand.randint(int(low_num), int(high_num))
+        # Round to realistic increments ($25K steps)
+        rand_price = round(rand_price / 25000) * 25000
+        price_str  = f'${rand_price:,}'
+
         prompt = f"""Create a fictional luxury property showcase post for Whitney Pierce featuring a home in {neighborhood}, San Diego.
-Price tier: {tier} (range: {low_str} - {high_str})
+Price tier: {tier}
+The price is EXACTLY: {price_str} — use this exact price, do not change it.
 Generate a compelling, specific fictional property — real architectural details, specific features, no generic descriptions.
 
 Return ONLY valid JSON:
@@ -216,7 +226,7 @@ Return ONLY valid JSON:
   "content_type": "home_tour",
   "neighborhood": "{neighborhood}",
   "tier": "{tier}",
-  "price": "specific price in this range: {low_str}-{high_str} (e.g. '$1,895,000')",
+  "price": "{price_str}",
   "beds": "number only (e.g. '4')",
   "baths": "number only (e.g. '3')",
   "sqft": "number with comma (e.g. '2,847')",
