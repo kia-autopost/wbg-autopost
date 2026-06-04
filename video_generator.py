@@ -222,34 +222,25 @@ def _dark_overlay(bg_frame):
     return Image.alpha_composite(bg_frame.convert('RGBA'), ov).convert('RGB')
 
 def _light_overlay(bg_frame):
-    """
-    Light editorial style: photo occupies top 58%, 
-    cream panel slides up from bottom 42%.
-    """
-    frame = bg_frame.copy().convert('RGBA')
-    
-    # Subtle dark gradient at very top of photo (for label legibility)
-    top_grad = Image.new('RGBA', (W,H), (0,0,0,0))
-    tg = ImageDraw.Draw(top_grad)
-    for y in range(int(H*0.25)):
-        a = int(120*(1-y/(H*0.25))**1.2)
-        tg.line([(0,y),(W,y)], fill=(0,0,0,a))
-    frame = Image.alpha_composite(frame, top_grad)
-
-    # Cream panel bottom 45%
-    panel_top = int(H * 0.55)
-    panel = Image.new('RGBA', (W,H), (0,0,0,0))
-    pd = ImageDraw.Draw(panel)
-    # Soft feathered edge at panel top
-    feather = 60
-    for y in range(feather):
-        a = int(245 * (y/feather)**1.8)
-        r,g,b = CREAM2
-        pd.line([(0, panel_top+y),(W, panel_top+y)], fill=(r,g,b,a))
-    pd.rectangle([(0, panel_top+feather),(W,H)], fill=(*CREAM2, 252))
-    frame = Image.alpha_composite(frame, panel)
-
-    return frame.convert('RGB')
+    """Full-bleed airy overlay - warm vignette, photo shows everywhere."""
+    import math
+    ov = Image.new('RGBA', (W,H), (0,0,0,0))
+    d  = ImageDraw.Draw(ov)
+    for y in range(H):
+        t = y / H
+        if t < 0.5:
+            top_a = int(160 * (math.cos(t / 0.5 * math.pi / 2)) ** 1.6)
+        else:
+            top_a = 0
+        if t > 0.6:
+            bot_a = int(180 * (math.sin((t-0.6)/0.4 * math.pi/2)) ** 1.4)
+        else:
+            bot_a = 0
+        base_a = 35
+        a = min(230, top_a + bot_a + base_a)
+        d.line([(0,y),(W,y)], fill=(0,0,0,a))
+    result = Image.alpha_composite(bg_frame.convert('RGBA'), ov)
+    return result.convert('RGB')
 
 # ─── TEXT HELPERS ────────────────────────────────────────────────────────────
 
@@ -417,73 +408,71 @@ def _render_light(img, draw, post_data, f):
     }
     label = labels.get(ct,'SAN DIEGO')
 
-    PAD = 45; CX = W//2
-    PANEL_TOP = int(H * 0.52)
+    PAD = 50; CX = W//2
 
-    T = {'label':int(FPS*0.4), 'hood':int(FPS*0.85), 'rule':int(FPS*1.3),
-         'hl':int(FPS*1.6), 'stat':int(FPS*2.2), 'body':int(FPS*2.8)}
+    T = {'label':int(FPS*0.4), 'hood':int(FPS*0.8), 'rule':int(FPS*1.3),
+         'hl':int(FPS*1.7), 'stat':int(FPS*2.3), 'body':int(FPS*2.9)}
 
-    # Label - top of photo, white, more visible
+    # Label - small spaced caps at top
     al = _a(f,T['label'],18); yo = _y(f,T['label'],18)
-    _paste(img, label, _font('oswald_regular',26), CX, 95+yo, WHITE, int(al*0.90))
+    _paste(img, label, _font('oswald_regular',24), CX, 100+yo, CREAM, int(al*0.70))
 
-    # Neighborhood - MASSIVE black in cream panel
+    # Neighborhood - MASSIVE white, full bleed
     al = _a(f,T['hood'],22); yo = _y(f,T['hood'],22)
-    hood_bottom = PANEL_TOP + 90
+    hood_bottom = 260
     if al:
-        for sz in [100,84,70,58,48]:
+        for sz in [120,100,84,70,58]:
             fn = _font('oswald_bold',sz)
             nlines = _wrap(draw, hood, fn, W-PAD*2)
             if len(nlines) <= 2: break
-        y_cur = PANEL_TOP + 52
+        y_cur = 155
         for line in nlines[:2]:
-            _paste(img, line, fn, CX, y_cur+yo, BLACK, al)
+            _paste(img, line, fn, CX, y_cur+yo, WHITE, al)
             y_cur += sz+8
         hood_bottom = y_cur + yo + 5
 
     # Orange rule
-    al = _a(f,T['rule'],10); rule_y = hood_bottom + 16
-    _paste_line(img, CX-35, rule_y, CX+35, rule_y, ORANGE, al, w=3)
+    al = _a(f,T['rule'],10); rule_y = hood_bottom + 20
+    _paste_line(img, CX-40, rule_y, CX+40, rule_y, ORANGE, al, w=4)
 
-    # Headline - black oswald, fits 1-2 lines
+    # Headline - cream/white on photo
     al = _a(f,T['hl'],18); yo = _y(f,T['hl'],20)
-    hl_bottom = rule_y + 42
+    hl_bottom = rule_y + 50
     if al and hl:
-        for fsz in [34,28,24]:
+        for fsz in [38,32,28,24]:
             fh = _font('oswald_regular', fsz)
             hlines = _wrap(draw, hl, fh, W-PAD*2)
             if len(hlines) <= 2: break
-        y_cur = rule_y + 42
+        y_cur = rule_y + 50
         for line in hlines[:2]:
-            _paste(img, line, fh, CX, y_cur+yo, BLACK, int(al*0.98))
+            _paste(img, line, fh, CX, y_cur+yo, WHITE, int(al*0.95))
             y_cur += fsz + 10
         hl_bottom = y_cur + yo
 
-    # Stat - below headline with guaranteed clearance
+    # Stat - orange, bold
     al = _a(f,T['stat'],18); yo = _y(f,T['stat'],18)
-    stat_bottom = hl_bottom + 60
+    stat_bottom = hl_bottom + 50
     if al and stat:
         stat_short = stat[:20].rsplit(' ',1)[0] if len(stat) > 20 else stat
-        for ssz in [52,42,34,28]:
+        for ssz in [62,50,42,34]:
             fs = _font('oswald_bold', ssz)
             if draw.textbbox((0,0),stat_short,font=fs)[2] <= W-PAD*2: break
-        # Always at least 40px below hl_bottom, never in logo zone
-        stat_y = max(hl_bottom + 40, PANEL_TOP + 200)
+        stat_y = max(hl_bottom + 45, 620)
         stat_y = min(stat_y, H - 310)
         _paste(img, stat_short, fs, CX, stat_y+yo, ORANGE, al)
         stat_bottom = stat_y + ssz + 15
 
-    # Body - darker, more visible, after stat
+    # Body - cream text on photo
     al = _a(f,T['body'],20); yo = _y(f,T['body'],20)
     if al and body:
-        fb = _font('raleway', 24)
+        fb = _font('raleway', 26)
         body_short = body[:110].rsplit(' ',1)[0] if len(body) > 110 else body
         blines = _wrap(draw, body_short, fb, W-PAD*2)
-        y_cur = stat_bottom + 22
+        y_cur = stat_bottom + 20
         for line in blines[:2]:
-            if y_cur + yo < H - 250:  # never overlap logo
-                _paste(img, line, fb, CX, y_cur+yo, BLACK, int(al*0.88))
-                y_cur += 34
+            if y_cur + yo < H - 250:
+                _paste(img, line, fb, CX, y_cur+yo, CREAM, int(al*0.85))
+                y_cur += 36
 
 # ─── LOGO ────────────────────────────────────────────────────────────────────
 
@@ -491,8 +480,9 @@ def _render_logo(img, f, is_light=False):
     al = _a(f, int(FPS*0.8), 24)
     if al <= 0: return
     # Use dark logo on light backgrounds, white on dark
-    logo_file = DARK_LOGO if is_light else PREFERRED_LOGO
-    fallbacks = [PREFERRED_LOGO] + FALLBACK_LOGOS if is_light else FALLBACK_LOGOS
+    # Both styles now full-bleed dark background - always use white logo
+    logo_file = PREFERRED_LOGO
+    fallbacks = FALLBACK_LOGOS
     logo = None
     for name in [logo_file] + fallbacks:
         p = os.path.join(ASSETS_DIR, name)
@@ -617,50 +607,48 @@ def _render_home_tour(img, draw, post_data, f):
     feat3    = post_data.get('feature_3', '')
     stat     = post_data.get('stat', '')
 
-    PAD = 45; CX = W//2
-    PANEL_TOP = int(H * 0.50)
+    PAD = 50; CX = W//2
 
     T = {'label':int(FPS*0.3), 'price':int(FPS*0.7), 'hood':int(FPS*1.1),
          'rule':int(FPS*1.5), 'details':int(FPS*1.9), 'features':int(FPS*2.6)}
 
-    # JUST LISTED label on photo
+    # JUST LISTED label
     al = _a(f,T['label'],16); yo = _y(f,T['label'],16)
-    _paste(img, 'JUST LISTED', _font('oswald_bold',28), CX, 88+yo, WHITE, int(al*0.95))
+    _paste(img, 'JUST LISTED', _font('oswald_regular',24), CX, 100+yo, CREAM, int(al*0.70))
 
-    # Price — large, on photo with backing
+    # Price — dramatic, large
     al = _a(f,T['price'],20); yo = _y(f,T['price'],20)
     if al and price:
-        _paste_backed(img, draw, price, _font('oswald_bold',54), CX, 160+yo,
-                     WHITE, al, bg_color=(0,0,0), bg_alpha_mult=0.6, pad_x=25, pad_y=12)
+        _paste(img, price, _font('oswald_bold',72), CX, 185+yo, WHITE, al)
 
-    # Neighborhood in cream panel
+    # Neighborhood - white, full bleed
     al = _a(f,T['hood'],22); yo = _y(f,T['hood'],22)
-    hood_bottom = PANEL_TOP + 80
+    hood_bottom = 320
     if al:
         for sz in [92,76,62,50,42]:
             fn = _font('oswald_bold',sz)
             nlines = _wrap(draw, hood, fn, W-PAD*2)
             if len(nlines) <= 2: break
-        y_cur = PANEL_TOP + 48
+        y_cur = 300
         for line in nlines[:2]:
-            _paste(img, line, fn, CX, y_cur+yo, BLACK, al)
+            _paste(img, line, fn, CX, y_cur+yo, WHITE, al)
             y_cur += sz+6
         hood_bottom = y_cur+yo+5
 
     # Orange rule
-    al = _a(f,T['rule'],10); rule_y = hood_bottom+14
-    _paste_line(img, CX-35, rule_y, CX+35, rule_y, ORANGE, al, w=3)
+    al = _a(f,T['rule'],10); rule_y = hood_bottom+16
+    _paste_line(img, CX-40, rule_y, CX+40, rule_y, ORANGE, al, w=4)
 
     # Beds/Baths/Sqft details
     al = _a(f,T['details'],18); yo = _y(f,T['details'],18)
     if al and (beds or baths or sqft):
-        fd = _font('oswald_regular',32)
+        fd = _font('oswald_regular',34)
         details = []
         if beds:  details.append(f'{beds} BD')
         if baths: details.append(f'{baths} BA')
         if sqft:  details.append(f'{sqft} SQFT')
         detail_str = '  ·  '.join(details)
-        _paste(img, detail_str, fd, CX, rule_y+38+yo, DKGRAY, int(al*0.9))
+        _paste(img, detail_str, fd, CX, rule_y+42+yo, CREAM, int(al*0.90))
 
     # Features list
     al = _a(f,T['features'],20); yo = _y(f,T['features'],20)
@@ -729,6 +717,63 @@ def _silence(path):
         w.setnchannels(1); w.setsampwidth(2)
         w.setframerate(44100); w.writeframes(s.tobytes())
 
+AUDIO_STATE_FILE = '/tmp/wbg_audio_state.json'
+
+def _get_audio_track():
+    """Pick a random mp3 from assets, rotating through all before repeating."""
+    all_tracks = sorted([
+        f for f in os.listdir(ASSETS_DIR)
+        if f.endswith('.mp3') and os.path.exists(os.path.join(ASSETS_DIR, f))
+    ])
+    if not all_tracks:
+        return None
+    state = {}
+    try:
+        if os.path.exists(AUDIO_STATE_FILE):
+            with open(AUDIO_STATE_FILE, 'r') as f:
+                state = json.load(f)
+    except:
+        state = {}
+    used   = set(state.get('used_tracks', []))
+    unused = [t for t in all_tracks if t not in used]
+    if not unused:
+        log.info('Audio pool exhausted, resetting')
+        unused = all_tracks
+        used   = set()
+    chosen = random.choice(unused)
+    used.add(chosen)
+    state['used_tracks'] = list(used)
+    try:
+        with open(AUDIO_STATE_FILE, 'w') as f:
+            json.dump(state, f)
+    except:
+        pass
+    log.info(f'Audio: {chosen} ({len(unused)-1} unused of {len(all_tracks)})')
+    return os.path.join(ASSETS_DIR, chosen)
+
+def _prepare_audio(tmp_dir):
+    """Use a music track if available, otherwise silence."""
+    track      = _get_audio_track()
+    audio_path = os.path.join(tmp_dir, 'audio.wav')
+    if track and os.path.exists(track):
+        try:
+            converted = os.path.join(tmp_dir, 'music.wav')
+            subprocess.run([
+                imageio_ffmpeg.get_ffmpeg_exe(), '-y',
+                '-i', track,
+                '-t', str(DURATION),
+                '-af', f'afade=t=in:st=0:d=1,afade=t=out:st={DURATION-2}:d=2,volume=0.35',
+                '-ar', '44100', '-ac', '1',
+                converted
+            ], check=True, capture_output=True, timeout=30)
+            log.info(f'Audio prepared from {os.path.basename(track)}')
+            return converted
+        except Exception as e:
+            log.warning(f'Audio prep failed: {e}, using silence')
+    _silence(audio_path)
+    return audio_path
+
+
 # ─── ENTRY ───────────────────────────────────────────────────────────────────
 
 def generate_reel(post_data: dict) -> str:
@@ -749,8 +794,7 @@ def generate_reel(post_data: dict) -> str:
         log.info('Building frames...')
         _build_frames(post_data, bg, tmp)
 
-        audio = os.path.join(tmp,'audio.wav')
-        _silence(audio)
+        audio = _prepare_audio(tmp)
 
         out = os.path.join(tmp,'reel.mp4')
         log.info('Encoding...')
