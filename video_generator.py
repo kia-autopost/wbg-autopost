@@ -195,22 +195,27 @@ def _ken_burns(bg, f, total):
 # ─── OVERLAYS ────────────────────────────────────────────────────────────────
 
 def _dark_overlay(bg_frame):
-    """Very heavy dark overlay - photo gives atmosphere, text stays king."""
+    """Smooth cinematic vignette - no hard bands, natural darkening."""
+    import math
     ov = Image.new('RGBA', (W,H), (0,0,0,0))
     d  = ImageDraw.Draw(ov)
     for y in range(H):
-        t = y/H
-        if t < 0.50:
-            # Top half: very dark so text pops
-            a = int(230*(1-t/0.50)**1.2)
-            a = max(a, 160)
-        elif t > 0.55:
-            # Bottom half: even darker for logo zone
-            a = int(200 + int(55*((t-0.55)/0.45)))
+        t = y / H
+        # Smooth cosine curve - dark at top and bottom, clear in middle
+        # Top vignette: fades smoothly from 210 to 0 over top 55%
+        if t < 0.55:
+            top_a = int(210 * (math.cos(t / 0.55 * math.pi / 2)) ** 1.4)
         else:
-            # Narrow window: slightly lighter to let photo breathe
-            a = 140
-        d.line([(0,y),(W,y)], fill=(0,0,0,min(a,245)))
+            top_a = 0
+        # Bottom vignette: fades smoothly from 0 to 220 over bottom 45%
+        if t > 0.55:
+            bot_a = int(220 * (math.sin((t - 0.55) / 0.45 * math.pi / 2)) ** 1.2)
+        else:
+            bot_a = 0
+        # Base dark tint across whole frame for photo desaturation
+        base_a = 60
+        a = min(255, top_a + bot_a + base_a)
+        d.line([(0,y),(W,y)], fill=(0,0,0,a))
     return Image.alpha_composite(bg_frame.convert('RGBA'), ov).convert('RGB')
 
 def _light_overlay(bg_frame):
@@ -447,7 +452,7 @@ def _render_light(img, draw, post_data, f):
             if len(hlines) <= 2: break
         y_cur = rule_y + 42
         for line in hlines[:2]:
-            _paste(img, line, fh, CX, y_cur+yo, DKGRAY, int(al*0.95))
+            _paste(img, line, fh, CX, y_cur+yo, BLACK, int(al*0.98))
             y_cur += fsz + 10
         hl_bottom = y_cur + yo
 
@@ -474,7 +479,7 @@ def _render_light(img, draw, post_data, f):
         y_cur = stat_bottom + 22
         for line in blines[:2]:
             if y_cur + yo < H - 250:  # never overlap logo
-                _paste(img, line, fb, CX, y_cur+yo, DKGRAY, int(al*0.70))
+                _paste(img, line, fb, CX, y_cur+yo, BLACK, int(al*0.88))
                 y_cur += 34
 
 # ─── LOGO ────────────────────────────────────────────────────────────────────
@@ -580,15 +585,20 @@ def _render_market_data(img, draw, post_data, f):
                 _paste(img, 'YoY CHANGE', _font('oswald_regular',20), 3*W//4, sub_y+yo, CREAM, int(al*0.6))
                 _paste(img, yoy, _font('oswald_bold',46), 3*W//4, sub_y+40+yo, color, al)
 
-    # Whitney insight
+    # Whitney insight - always below stats grid
     al = _a(f,T['insight'],22); yo = _y(f,T['insight'],22)
     if al and insight:
-        fi = _font('oswald_regular',28)
-        ilines = _wrap(draw, insight[:130], fi, W-PAD*2)
-        y_cur = rule_y + 280
+        fi = _font('oswald_regular',26)
+        # Truncate insight to fit cleanly in 2 lines
+        insight_short = insight[:110].rsplit(' ',1)[0] if len(insight) > 110 else insight
+        ilines = _wrap(draw, insight_short, fi, W-PAD*2)
+        # Always start below the stats grid (rule_y + 320 minimum)
+        y_cur = max(rule_y + 320, 620)
+        y_cur = min(y_cur, H - 280)  # never overlap logo
         for line in ilines[:2]:
-            _paste(img, line, fi, CX, y_cur+yo, CREAM, int(al*0.82))
-            y_cur += 38
+            if y_cur + yo < H - 250:
+                _paste(img, line, fi, CX, y_cur+yo, CREAM, int(al*0.80))
+                y_cur += 36
 
 # ─── HOME TOUR RENDERER ──────────────────────────────────────────────────────
 
