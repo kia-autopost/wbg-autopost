@@ -804,75 +804,53 @@ def _prepare_audio(tmp_dir, post_data=None):
     base       = np.zeros(total, dtype=np.float32)
     audio_path = os.path.join(tmp_dir, 'audio.wav')
 
-    # 1. Background music track at low volume
-    track = _get_audio_track()
-    if track and os.path.exists(track):
-        try:
-            converted = os.path.join(tmp_dir, 'music.wav')
-            subprocess.run([
-                imageio_ffmpeg.get_ffmpeg_exe(), '-y',
-                '-i', track, '-t', str(DURATION),
-                '-af', f'afade=t=in:st=0:d=1.5,afade=t=out:st={DURATION-2}:d=2,volume=0.18',
-                '-ar', '44100', '-ac', '1', '-f', 'wav', converted
-            ], check=True, capture_output=True, timeout=30)
-            with wave.open(converted, 'r') as wf:
-                frames  = wf.readframes(wf.getnframes())
-                music   = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32767.0
-            length = min(len(music), total)
-            base[:length] += music[:length] * 0.18
-            log.info(f'Music: {os.path.basename(track)}')
-        except Exception as e:
-            log.warning(f'Music failed: {e}')
+    # 1. No background music - sound effects only for impact
+    # (background music was drowning out the sound design)
 
-    # 2. Sound effects timed to content type
+    # 2. Sound effects timed to content type - HIGH VOLUME
     if ct in ('sd_hidden_gem', 'current_event_tie', 'investor_quote'):
-        # Dark cinematic: bass pulse at open, whoosh on hood reveal, ping on stat
         s, _ = _load_sound('bass_pulse.wav')
-        base  = _mix_sound(base, s, 0.1, volume=0.7)
+        base  = _mix_sound(base, s, 0.05, volume=1.2)
         s, _  = _load_sound('whoosh_cinematic.wav')
-        base  = _mix_sound(base, s, 0.85, volume=0.75)
+        base  = _mix_sound(base, s, 0.8, volume=1.3)
         s, _  = _load_sound('ping_stat.wav')
-        base  = _mix_sound(base, s, 3.4, volume=0.65)
+        base  = _mix_sound(base, s, 3.2, volume=1.1)
 
     elif ct == 'market_data':
-        # Market data: tension build at open, ping on stat
         s, _  = _load_sound('tension_build.wav')
-        base  = _mix_sound(base, s, 0.1, volume=0.65)
+        base  = _mix_sound(base, s, 0.05, volume=1.1)
         s, _  = _load_sound('whoosh_cinematic.wav')
-        base  = _mix_sound(base, s, 0.85, volume=0.6)
+        base  = _mix_sound(base, s, 0.8, volume=1.2)
         s, _  = _load_sound('ping_stat.wav')
-        base  = _mix_sound(base, s, 1.5, volume=0.7)
+        base  = _mix_sound(base, s, 1.4, volume=1.2)
         s, _  = _load_sound('ping_stat.wav')
-        base  = _mix_sound(base, s, 2.1, volume=0.55)  # second stat
+        base  = _mix_sound(base, s, 2.0, volume=1.0)
 
     elif ct == 'home_tour':
-        # Home tour: soft reveal, chime on price, whoosh on hood
-        s, _  = _load_sound('reveal_soft.wav')
-        base  = _mix_sound(base, s, 0.2, volume=0.6)
-        s, _  = _load_sound('chime_luxury.wav')
-        base  = _mix_sound(base, s, 0.65, volume=0.75)
         s, _  = _load_sound('whoosh_cinematic.wav')
-        base  = _mix_sound(base, s, 1.05, volume=0.65)
+        base  = _mix_sound(base, s, 0.15, volume=1.2)
+        s, _  = _load_sound('chime_luxury.wav')
+        base  = _mix_sound(base, s, 0.6, volume=1.3)
+        s, _  = _load_sound('whoosh_cinematic.wav')
+        base  = _mix_sound(base, s, 1.0, volume=1.1)
         s, _  = _load_sound('ping_stat.wav')
-        base  = _mix_sound(base, s, 2.6, volume=0.5)
+        base  = _mix_sound(base, s, 2.5, volume=1.0)
 
     elif ct in ('sd_lifestyle_hook', 'san_diego_lifestyle'):
-        # Lifestyle: ambient wave + soft reveal
         s, _  = _load_sound('ambient_wave.wav')
-        base  = _mix_sound(base, s, 0.0, volume=0.55)
+        base  = _mix_sound(base, s, 0.0, volume=1.1)
         s, _  = _load_sound('reveal_soft.wav')
-        base  = _mix_sound(base, s, 0.85, volume=0.6)
+        base  = _mix_sound(base, s, 0.8, volume=1.2)
         s, _  = _load_sound('reveal_soft.wav')
-        base  = _mix_sound(base, s, 1.8, volume=0.45)
+        base  = _mix_sound(base, s, 1.7, volume=0.9)
 
     else:
-        # Default: whoosh + soft reveal
         s, _  = _load_sound('whoosh_cinematic.wav')
-        base  = _mix_sound(base, s, 0.85, volume=0.65)
+        base  = _mix_sound(base, s, 0.8, volume=1.2)
         s, _  = _load_sound('reveal_soft.wav')
-        base  = _mix_sound(base, s, 1.7, volume=0.55)
+        base  = _mix_sound(base, s, 1.6, volume=1.0)
         s, _  = _load_sound('ping_stat.wav')
-        base  = _mix_sound(base, s, 3.3, volume=0.5)
+        base  = _mix_sound(base, s, 3.2, volume=1.0)
 
     # Normalize and save
     peak = np.max(np.abs(base))
