@@ -1,5 +1,5 @@
 """
-WBG Video Generator - V5 Dual Style Edition
+WBG Video Generator - V6 Full Bleed + Audio Edition
 - DARK CINEMATIC: sd_hidden_gem, market_stat, current_event_tie, investor_quote
 - LIGHT EDITORIAL: buyer_seller_tip, hot_take, hyper_local_intel, sd_lifestyle_hook,
                    san_diego_lifestyle, property_spotlight
@@ -661,7 +661,9 @@ def _render_home_tour(img, draw, post_data, f):
                 feat_short = feat[:32].rsplit(' ',1)[0] if len(feat) > 32 else feat
                 feat_lines = _wrap(draw, feat_short, ff, W-PAD*2-30)
                 _paste(img, '▸', _font('oswald_regular',20), PAD+5, feat_y+yo, ORANGE, int(al*0.9))
-                _paste(img, feat_lines[0] if feat_lines else feat_short, ff, PAD+25, feat_y+yo, DKGRAY, int(al*0.78), anchor='lm')
+                # Shadow for readability on photo
+                _paste(img, feat_lines[0] if feat_lines else feat_short, ff, PAD+26, feat_y+yo+1, BLACK, int(al*0.5), anchor='lm')
+                _paste(img, feat_lines[0] if feat_lines else feat_short, ff, PAD+25, feat_y+yo, WHITE, int(al*0.90), anchor='lm')
                 feat_y += 38
 
     # Stat
@@ -724,7 +726,14 @@ def _get_audio_track():
     all_tracks = sorted([
         f for f in os.listdir(ASSETS_DIR)
         if f.endswith('.mp3') and os.path.exists(os.path.join(ASSETS_DIR, f))
+        and f.startswith('fixed_')  # Use properly encoded tracks only
     ])
+    # Fallback to any mp3 if no fixed_ tracks found
+    if not all_tracks:
+        all_tracks = sorted([
+            f for f in os.listdir(ASSETS_DIR)
+            if f.endswith('.mp3') and os.path.exists(os.path.join(ASSETS_DIR, f))
+        ])
     if not all_tracks:
         return None
     state = {}
