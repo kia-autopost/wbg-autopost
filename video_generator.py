@@ -355,12 +355,27 @@ def _render_dark(img, draw, post_data, f):
                 b = b[:idx+1].strip(); break
         else:
             b = b.rsplit(' ',1)[0] if len(body)>90 else body
-        blines=_wrap(draw,b,fb,W-PAD*2-20)
-        y_cur=hl_bottom+42
-        for line in blines[:2]:
-            _paste_pill(img,draw,line,fb,CX,y_cur+yo,WHITE,al,bg_color=(0,0,0),bg_alpha=210,pad_x=32,pad_y=14)
-            y_cur+=50
-        body_bottom=y_cur+yo
+        # Render as single multi-line pill backing
+        blines=_wrap(draw,b,fb,W-PAD*2-40)[:2]
+        if blines:
+            # Measure full pill height
+            line_h = 38
+            total_h = len(blines)*line_h + 28
+            # Find widest line
+            max_tw = max(draw.textbbox((0,0),l,font=fb)[2] for l in blines)
+            bx1 = CX - max_tw//2 - 32
+            bx2 = CX + max_tw//2 + 32
+            by1 = hl_bottom + 42 + yo - 14
+            by2 = by1 + total_h
+            pill = Image.new("RGBA",(W,H),(0,0,0,0))
+            pd   = ImageDraw.Draw(pill)
+            pd.rounded_rectangle([(bx1,by1),(bx2,by2)],radius=22,fill=(0,0,0,int(al*0.82)))
+            img.alpha_composite(pill)
+            y_cur = hl_bottom + 52 + yo
+            for line in blines:
+                _paste(img,line,fb,CX,y_cur,WHITE,int(al*0.97))
+                y_cur += line_h
+            body_bottom = y_cur + yo
 
     # Stat - large orange
     al=_a(f,T['stat'],20); yo=_y(f,T['stat'],20)
