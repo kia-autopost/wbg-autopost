@@ -346,13 +346,20 @@ def _render_dark(img, draw, post_data, f):
     al=_a(f,T['body'],22); yo=_y(f,T['body'],22)
     body_bottom=hl_bottom+30
     if al and body:
-        fb=_font('raleway',30)
-        body_short=body[:75].rsplit(' ',1)[0] if len(body)>75 else body
-        blines=_wrap(draw,body_short,fb,W-PAD*2-40)
+        fb=_font('raleway',28)
+        # Truncate at natural break — period, dash, or word boundary
+        b = body[:90]
+        for sep in ['. ', ' — ', ', ']:
+            idx = b.rfind(sep)
+            if idx > 35:
+                b = b[:idx+1].strip(); break
+        else:
+            b = b.rsplit(' ',1)[0] if len(body)>90 else body
+        blines=_wrap(draw,b,fb,W-PAD*2-20)
         y_cur=hl_bottom+42
         for line in blines[:2]:
-            _paste_pill(img,draw,line,fb,CX,y_cur+yo,WHITE,al,bg_color=(0,0,0),bg_alpha=200,pad_x=32,pad_y=14)
-            y_cur+=52
+            _paste_pill(img,draw,line,fb,CX,y_cur+yo,WHITE,al,bg_color=(0,0,0),bg_alpha=210,pad_x=32,pad_y=14)
+            y_cur+=50
         body_bottom=y_cur+yo
 
     # Stat - large orange
