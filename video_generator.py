@@ -159,6 +159,11 @@ def _fetch_bg(content_type, neighborhood='', size_w=None, size_h=None):
     if chosen and os.path.exists(path):
         try:
             bg = Image.open(path).convert('RGB')
+            # Crop bottom 50px to remove watermarks
+            if bg.height > 200: bg = bg.crop((0, 0, bg.width, bg.height - 50))
+            # Crop bottom 50px to remove any watermarks
+            if bg.height > 100:
+                bg = bg.crop((0, 0, bg.width, bg.height - 50))
             ratio = max(bw/bg.width, bh/bg.height)
             bg = bg.resize((int(bg.width*ratio), int(bg.height*ratio)), Image.LANCZOS)
             return bg
@@ -371,12 +376,12 @@ def _render_dark(img, draw, post_data, f):
     if al and body:
         fb = _font('oswald_regular',26)
         # Truncate body to ~120 chars so it fits in 2 lines cleanly
-        body_short = body[:120].rsplit(' ',1)[0] if len(body) > 120 else body
+        body_short = body[:100].rsplit(' ',1)[0] if len(body) > 100 else body
         blines = _wrap(draw, body_short, fb, W-PAD*2)
         y_cur = hl_bottom+36
         for line in blines[:2]:
-            _paste(img, line, fb, CX+1, y_cur+yo+1, BLACK, int(al*0.45))
-            _paste(img, line, fb, CX, y_cur+yo, CREAM, int(al*0.85))
+            _paste(img, line, fb, CX+2, y_cur+yo+2, BLACK, int(al*0.65))
+            _paste(img, line, fb, CX, y_cur+yo, WHITE, int(al*0.95))
             y_cur += 38
         body_bottom = y_cur+yo
 
@@ -471,12 +476,13 @@ def _render_light(img, draw, post_data, f):
     al = _a(f,T['body'],20); yo = _y(f,T['body'],20)
     if al and body:
         fb = _font('raleway', 26)
-        body_short = body[:110].rsplit(' ',1)[0] if len(body) > 110 else body
+        body_short = body[:100].rsplit(' ',1)[0] if len(body) > 100 else body
         blines = _wrap(draw, body_short, fb, W-PAD*2)
         y_cur = stat_bottom + 20
         for line in blines[:2]:
             if y_cur + yo < H - 250:
-                _paste(img, line, fb, CX, y_cur+yo, CREAM, int(al*0.85))
+                _paste(img, line, fb, CX+1, y_cur+yo+1, BLACK, int(al*0.55))
+                _paste(img, line, fb, CX, y_cur+yo, WHITE, int(al*0.92))
                 y_cur += 36
 
 # ─── LOGO ────────────────────────────────────────────────────────────────────
