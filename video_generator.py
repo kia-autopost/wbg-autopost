@@ -36,7 +36,7 @@ LTGRAY = (180, 175, 168)
 DARK_TYPES  = {'sd_hidden_gem', 'market_stat', 'current_event_tie', 'investor_quote', 'market_data'}
 LIGHT_TYPES = {'buyer_seller_tip', 'hot_take', 'hyper_local_intel', 'sd_lifestyle_hook',
                'san_diego_lifestyle', 'property_spotlight', 'home_tour'}
-HEADSHOT_TYPES = {'buyer_seller_tip', 'hot_take'}
+HEADSHOT_TYPES = {'buyer_seller_tip', 'hot_take', 'sd_hidden_gem', 'hyper_local_intel', 'sd_lifestyle_hook', 'current_event_tie'}
 
 UNSPLASH_KEY = os.getenv('UNSPLASH_ACCESS_KEY', 'gWh-_occEjfxnSZSyxlrqYJYB3indaIXCp3STJyGesc')
 
@@ -154,16 +154,28 @@ def _fetch_bg(content_type, neighborhood='', size_w=None, size_h=None):
     bw = size_w or int(W * 1.12)
     bh = size_h or int(H * 1.12)
     is_dark = content_type in DARK_TYPES
-    chosen  = _pick_photo(is_dark)
-    path    = os.path.join(ASSETS_DIR, chosen)
+
+    # Try to find a neighborhood-specific photo first
+    chosen = None
+    if neighborhood and neighborhood.lower() not in ('san diego', ''):
+        hood_key = neighborhood.lower().replace(' ', '_').replace("'", '')
+        all_jpgs = [f for f in os.listdir(ASSETS_DIR) if f.endswith('.jpg')]
+        hood_matches = [f for f in all_jpgs if hood_key in f.lower()]
+        if hood_matches:
+            chosen = random.choice(hood_matches)
+            log.info(f'Neighborhood photo: {chosen} for {neighborhood}')
+
+    # Fall back to smart rotation
+    if not chosen:
+        chosen = _pick_photo(is_dark)
+
+    path = os.path.join(ASSETS_DIR, chosen)
     if chosen and os.path.exists(path):
         try:
             bg = Image.open(path).convert('RGB')
-            # Crop bottom 50px to remove watermarks
-            if bg.height > 200: bg = bg.crop((0, 0, bg.width, bg.height - 50))
-            # Crop bottom 50px to remove any watermarks
-            if bg.height > 100:
-                bg = bg.crop((0, 0, bg.width, bg.height - 50))
+            # Crop bottom 60px to remove watermarks
+            if bg.height > 200:
+                bg = bg.crop((0, 0, bg.width, bg.height - 60))
             ratio = max(bw/bg.width, bh/bg.height)
             bg = bg.resize((int(bg.width*ratio), int(bg.height*ratio)), Image.LANCZOS)
             return bg
@@ -376,14 +388,26 @@ def _render_dark(img, draw, post_data, f):
     if al and body:
         fb = _font('oswald_regular',26)
         # Truncate body to ~120 chars so it fits in 2 lines cleanly
-        body_short = body[:100].rsplit(' ',1)[0] if len(body) > 100 else body
+        body_short = body[:90].rsplit(' ',1)[0] if len(body) > 90 else body
         blines = _wrap(draw, body_short, fb, W-PAD*2)
         y_cur = hl_bottom+36
         for line in blines[:2]:
-            bar = Image.new("RGBA", (W, 40), (0,0,0,int(al*0.55)))
-            img.paste(bar, (0, y_cur+yo-16), bar)
+            # Measure text width for fitted backing
+            tw = draw.textbbox((0,0), line, font=fb)[2]
+            pad_x, pad_y = 28, 10
+            bx1 = CX - tw//2 - pad_x
+            bx2 = CX + tw//2 + pad_x
+            by1 = y_cur + yo - pad_y - 2
+            by2 = y_cur + yo + pad_y + 22
+            # Rounded frosted backing
+            pill = Image.new('RGBA', (W, H), (0,0,0,0))
+            pd = ImageDraw.Draw(pill)
+            radius = 18
+            pd.rounded_rectangle([(bx1, by1),(bx2, by2)], radius=radius,
+                                 fill=(0,0,0,int(al*0.52)))
+            img.alpha_composite(pill)
             _paste(img, line, fb, CX, y_cur+yo, WHITE, int(al*0.95))
-            y_cur += 38
+            y_cur += 48
         body_bottom = y_cur+yo
     # Stat - hard truncate to 25 chars, auto-size to fit
     al = _a(f,T['stat'],20); yo = _y(f,T['stat'],20)
@@ -475,15 +499,24 @@ def _render_light(img, draw, post_data, f):
     # Body - cream text on photo
     al = _a(f,T['body'],20); yo = _y(f,T['body'],20)
     if al and body:
-        fb = _font('raleway', 26)
-        body_short = body[:100].rsplit(' ',1)[0] if len(body) > 100 else body
+        fb = _font('raleway', 30)
+        body_short = body[:90].rsplit(' ',1)[0] if len(body) > 90 else body
         blines = _wrap(draw, body_short, fb, W-PAD*2)
         y_cur = stat_bottom + 20
         for line in blines[:2]:
-            bar = Image.new("RGBA", (W, 40), (0,0,0,int(al*0.55)))
-            img.paste(bar, (0, y_cur+yo-16), bar)
+            tw = draw.textbbox((0,0), line, font=fb)[2]
+            pad_x, pad_y = 28, 10
+            bx1 = CX - tw//2 - pad_x
+            bx2 = CX + tw//2 + pad_x
+            by1 = y_cur + yo - pad_y - 2
+            by2 = y_cur + yo + pad_y + 22
+            pill = Image.new('RGBA', (W, H), (0,0,0,0))
+            pd = ImageDraw.Draw(pill)
+            pd.rounded_rectangle([(bx1, by1),(bx2, by2)], radius=18,
+                                 fill=(0,0,0,int(al*0.52)))
+            img.alpha_composite(pill)
             _paste(img, line, fb, CX, y_cur+yo, WHITE, int(al*0.95))
-            y_cur += 36
+            y_cur += 48
 
 # ─── LOGO ────────────────────────────────────────────────────────────────────
 
@@ -514,14 +547,21 @@ def _render_headshot(img, f):
     if al <= 0: return
     try:
         hs = Image.open(HEADSHOT_PATH).convert('RGBA')
-        hw = 90; hh = int(hw*hs.height/hs.width)
+        # Triple size - much more prominent
+        hw = 280; hh = int(hw*hs.height/hs.width)
         hs = hs.resize((hw,hh), Image.LANCZOS)
+        # Add dark circular/oval backing so headshot stands out
+        backing = Image.new('RGBA', (hw+20, hh+20), (0,0,0,0))
+        bd = ImageDraw.Draw(backing)
+        bd.ellipse([(0,0),(hw+20,hh+20)], fill=(0,0,0,int(al*0.45)))
+        img.paste(backing, (W-hw-35, H-hh-200), backing)
+        # Apply alpha
         if al < 255:
             r,g,b,a2 = hs.split()
             a2 = a2.point(lambda x: int(x*al/255))
             hs = Image.merge('RGBA',(r,g,b,a2))
-        # Position in cream panel bottom right, above logo
-        img.paste(hs, (W-hw-25, H-hh-185), hs)
+        # Position bottom right, above logo, with breathing room
+        img.paste(hs, (W-hw-25, H-hh-195), hs)
     except: pass
 
 # ─── MARKET DATA RENDERER ───────────────────────────────────────────────────
