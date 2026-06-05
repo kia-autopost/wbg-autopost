@@ -1,4 +1,3 @@
-
 """
 WBG Content Generator - v4
 Content types:
@@ -218,8 +217,13 @@ Return ONLY valid JSON:
         
         # Generate a truly random price within the tier range
         import random as _rand
-        low_num  = float(low_str.replace('$','').replace('M','000000').replace('K','000'))
-        high_num = float(high_str.replace('$','').replace('M','000000').replace('K','000'))
+        def _parse_price(s):
+            s = s.replace('$','').replace(',','').strip()
+            if 'M' in s: return float(s.replace('M','')) * 1_000_000
+            if 'K' in s: return float(s.replace('K','')) * 1_000
+            return float(s)
+        low_num  = _parse_price(low_str)
+        high_num = _parse_price(high_str)
         rand_price = _rand.randint(int(low_num), int(high_num))
         # Round to realistic increments ($25K steps)
         rand_price = round(rand_price / 25000) * 25000
