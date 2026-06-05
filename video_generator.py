@@ -483,7 +483,7 @@ def _render_light(img, draw, post_data, f):
             bar = Image.new("RGBA", (W, 40), (0,0,0,int(al*0.55)))
             img.paste(bar, (0, y_cur+yo-16), bar)
             _paste(img, line, fb, CX, y_cur+yo, WHITE, int(al*0.95))
-                       y_cur += 36
+                      y_cur += 36
 
 # ─── LOGO ────────────────────────────────────────────────────────────────────
 
