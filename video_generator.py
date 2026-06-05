@@ -82,7 +82,7 @@ PEXELS_BY_TYPE = {
     'property_spotlight': ['1396122','259588','1029599','323780','2467285'],
 }
 
-PHOTO_STATE_FILE = '/tmp/wbg_photo_state.json'
+PHOTO_STATE_FILE = os.path.join(ASSETS_DIR, '.photo_state.json')
 
 def _get_photo_pool(is_dark):
     all_jpgs = sorted([
@@ -731,7 +731,7 @@ def _silence(path):
         w.setnchannels(1); w.setsampwidth(2)
         w.setframerate(44100); w.writeframes(s.tobytes())
 
-AUDIO_STATE_FILE = '/tmp/wbg_audio_state.json'
+AUDIO_STATE_FILE = os.path.join(ASSETS_DIR, '.audio_state.json')
 
 def _get_audio_track():
     """Pick a random mp3 from assets, rotating through all before repeating."""
