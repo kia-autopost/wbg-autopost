@@ -601,9 +601,10 @@ def _render_market_data(img, draw, post_data, f):
         y_cur = min(y_cur, H - 280)  # never overlap logo
         for line in ilines[:2]:
             if y_cur + yo < H - 250:
-                _paste(img, line, fi, CX, y_cur+yo, CREAM, int(al*0.80))
-                y_cur += 36
-
+                bar = Image.new("RGBA", (W, 42), (0,0,0,int(al*0.60)))
+                img.paste(bar, (0, y_cur+yo-16), bar)
+                _paste(img, line, fi, CX, y_cur+yo, WHITE, int(al*0.92))
+                y_cur += 38
 # ─── HOME TOUR RENDERER ──────────────────────────────────────────────────────
 
 def _render_home_tour(img, draw, post_data, f):
