@@ -380,9 +380,9 @@ def _render_dark(img, draw, post_data, f):
         blines = _wrap(draw, body_short, fb, W-PAD*2)
         y_cur = hl_bottom+36
         for line in blines[:2]:
-            _paste(img, line, fb, CX+2, y_cur+yo+2, BLACK, int(al*0.65))
+            bar = Image.new("RGBA", (W, 40), (0,0,0,int(al*0.55)))
+            img.paste(bar, (0, y_cur+yo-16), bar)
             _paste(img, line, fb, CX, y_cur+yo, WHITE, int(al*0.95))
-            y_cur += 38
         body_bottom = y_cur+yo
 
     # Stat - hard truncate to 25 chars, auto-size to fit
@@ -480,9 +480,9 @@ def _render_light(img, draw, post_data, f):
         blines = _wrap(draw, body_short, fb, W-PAD*2)
         y_cur = stat_bottom + 20
         for line in blines[:2]:
-            if y_cur + yo < H - 250:
-                _paste(img, line, fb, CX+1, y_cur+yo+1, BLACK, int(al*0.55))
-                _paste(img, line, fb, CX, y_cur+yo, WHITE, int(al*0.92))
+            bar = Image.new("RGBA", (W, 40), (0,0,0,int(al*0.55)))
+            img.paste(bar, (0, y_cur+yo-16), bar)
+            _paste(img, line, fb, CX, y_cur+yo, WHITE, int(al*0.95))
                 y_cur += 36
 
 # ─── LOGO ────────────────────────────────────────────────────────────────────
