@@ -766,8 +766,23 @@ def _get_audio_track():
     return os.path.join(ASSETS_DIR, chosen)
 
 def _prepare_audio(tmp_dir, post_data=None):
-    """Generate silent audio track — add music via Instagram after posting."""
+    """Embed a royalty-free music track directly into the video."""
     audio_path = os.path.join(tmp_dir, 'audio.wav')
+    track = _get_audio_track()
+    if track and os.path.exists(track):
+        try:
+            converted = os.path.join(tmp_dir, 'music.wav')
+            subprocess.run([
+                imageio_ffmpeg.get_ffmpeg_exe(), '-y',
+                '-i', track,
+                '-t', str(DURATION),
+                '-af', f'afade=t=in:st=0:d=1,afade=t=out:st={DURATION-2}:d=2,volume=0.8',
+                '-ar', '44100', '-ac', '1', converted
+            ], check=True, capture_output=True, timeout=30)
+            log.info(f'Music embedded: {os.path.basename(track)}')
+            return converted
+        except Exception as e:
+            log.warning(f'Music failed: {e}')
     _silence(audio_path)
     return audio_path
 
