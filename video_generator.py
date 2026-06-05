@@ -346,7 +346,7 @@ def _render_dark(img, draw, post_data, f):
     al=_a(f,T['body'],22); yo=_y(f,T['body'],22)
     body_bottom=hl_bottom+30
     if al and body:
-        fb=_font('raleway',28)
+        fb=_font('oswald_bold',32)
         # Truncate at natural break — period, dash, or word boundary
         b = body[:90]
         for sep in ['. ', ' — ', ', ']:
@@ -373,7 +373,7 @@ def _render_dark(img, draw, post_data, f):
             img.alpha_composite(pill)
             y_cur = hl_bottom + 52 + yo
             for line in blines:
-                _paste(img,line,fb,CX,y_cur,WHITE,int(al*0.97))
+                _paste(img,line,fb,CX,y_cur,WHITE,al)
                 y_cur += line_h
             body_bottom = y_cur + yo
 
